@@ -1,32 +1,3 @@
-@properties Properties begin
-    Name::String => (value => get(ENV, "BLOCK_NAME") do
-        error("Environment variable BLOCK_NAME not found")
-    end)
-    NodeId::Int64 => (value => parse(Int, get(ENV, "BLOCK_ID") do
-        error("Environment variable BLOCK_ID not found")
-    end))
-    StatusURI::String => (value => get(ENV, "STATUS_URI") do
-        error("Environment variable STATUS_URI not found")
-    end)
-    StatusStreamID::Int64 => (value => parse(Int, get(ENV, "STATUS_STREAM_ID") do
-        error("Environment variable STATUS_STREAM_ID not found")
-    end))
-    ControlURI::String => (value => get(ENV, "CONTROL_URI") do
-        error("Environment variable CONTROL_URI not found")
-    end)
-    ControlStreamID::Int64 => (value => parse(Int, get(ENV, "CONTROL_STREAM_ID") do
-        error("Environment variable CONTROL_STREAM_ID not found")
-    end))
-    ControlStreamFilter::String => (value => get(ENV, "CONTROL_STREAM_FILTER", nothing))
-    DataConnectionCount::Int64 => (
-        value => count(startswith("SUB_DATA_URI_"), keys(ENV)),
-        access => AccessMode.READABLE
-    )
-
-    # FIXME Include dynamically generated fields
-    # @generate_data_uri_fields
-end
-
 # Helper macro to generate fields from SUB_DATA_URI_* environment variables
 macro generate_data_uri_fields()
     fields = Expr(:block)
@@ -56,5 +27,37 @@ macro generate_data_uri_fields()
     end
 
     return fields
+end
+
+@properties Properties begin
+    Name::String => (value => get(ENV, "BLOCK_NAME") do
+        error("Environment variable BLOCK_NAME not found")
+    end)
+    NodeId::Int64 => (value => parse(Int64, get(ENV, "BLOCK_ID") do
+        error("Environment variable BLOCK_ID not found")
+    end))
+    HeartbeatPeriodNs::Int64 => (value => parse(Int64, get(ENV, "HEARTBEAT_PERIOD_NS", "10000000000")))
+    StatusURI::String => (value => get(ENV, "STATUS_URI") do
+        error("Environment variable STATUS_URI not found")
+    end)
+    StatusStreamID::Int64 => (value => parse(Int64, get(ENV, "STATUS_STREAM_ID") do
+        error("Environment variable STATUS_STREAM_ID not found")
+    end))
+    ControlURI::String => (value => get(ENV, "CONTROL_URI") do
+        error("Environment variable CONTROL_URI not found")
+    end)
+    ControlStreamID::Int64 => (value => parse(Int64, get(ENV, "CONTROL_STREAM_ID") do
+        error("Environment variable CONTROL_STREAM_ID not found")
+    end))
+    ControlStreamFilter::String => (value => get(ENV, "CONTROL_STREAM_FILTER", nothing))
+    DataConnectionCount::Int64 => (
+        value => count(startswith("SUB_DATA_URI_"), keys(ENV)),
+        access => AccessMode.READABLE
+    )
+    TestMatrix::Matrix{Float32} => (
+        value => rand(Float32, 10, 10)
+    )
+        
+    @generate_data_uri_fields
 end
 

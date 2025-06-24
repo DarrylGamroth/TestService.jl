@@ -3,6 +3,7 @@
 # Set the environment variables
 export JULIA_NUM_THREADS="auto"
 export JULIA_PROJECT=@.
+export HEARTBEAT_PERIOD_NS=100000000000 # 100 seconds
 export STATUS_URI="aeron:udp?endpoint=0.0.0.0:40123"
 export STATUS_STREAM_ID=1
 export CONTROL_URI="aeron-spy:aeron:udp?endpoint=0.0.0.0:40123"

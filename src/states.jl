@@ -1,14 +1,11 @@
-# Implement the AbstractHsm ancestor interface for each state
-@ancestor ControlStateMachine begin
-    :Top => :Root
-    :Ready => :Top
-    :Stopped => :Ready
-    :Processing => :Ready
-    :Paused => :Processing
-    :Playing => :Processing
-    :Error => :Top
-    :Exit => :Top
-end
+@statedef ControlStateMachine :Top
+@statedef ControlStateMachine :Ready :Top
+@statedef ControlStateMachine :Stopped :Ready
+@statedef ControlStateMachine :Processing :Ready
+@statedef ControlStateMachine :Paused :Processing
+@statedef ControlStateMachine :Playing :Processing
+@statedef ControlStateMachine :Error :Top
+@statedef ControlStateMachine :Exit :Top
 
 @on_event function (sm::ControlStateMachine, state::Root, event::Any, message)
     # @info "Default handler called with event: $(event)"
@@ -48,17 +45,65 @@ function _handle_property_write(sm::ControlStateMachine, properties, event, mess
     send_event_response(sm, event, value)
 end
 
+@on_entry function (sm::ControlStateMachine, state::Any)
+    @info "Entering state: $(state)"
+end
+
+@on_exit function (sm::ControlStateMachine, state::Any)
+    @info "Exiting state: $(state)"
+end
+
 # Top-level state control and message routing
 @on_initial function (sm::ControlStateMachine, ::Root)
     Hsm.transition!(sm, :Top)
 end
 
+@on_entry function (sm::ControlStateMachine, state::Ready)
+    @info "Entering state: $(state)"
+    setup_communications!(sm)
+
+    # Schedule the first heartbeat using the new API
+    heartbeat_delay = sm.properties[:HeartbeatPeriodNs]
+    schedule_timer_event!(sm, :Heartbeat, heartbeat_delay)
+end
+
+@on_exit function (sm::ControlStateMachine, state::Ready)
+    @info "Exiting state: $(state)"
+    # Cancel any scheduled timers using the new API
+    cancel_all_timers!(sm)
+    teardown_communications!(sm)
+end
+
 @on_initial function (sm::ControlStateMachine, ::Top)
+    @info "Initializing ControlStateMachine"
     Hsm.transition!(sm, :Playing)
 end
 
 @on_event function (sm::ControlStateMachine, ::Top, ::Reset, _)
     Hsm.transition!(sm, :Top)
+end
+
+@on_event function (sm::ControlStateMachine, ::Top, event::Heartbeat, now::Int64)
+    # Handle heartbeat timeout by sending a heartbeat event
+    send_event_response(sm, event, Hsm.current(sm))
+
+    # Reschedule the next heartbeat using absolute time API
+    next_heartbeat_time = now + sm.properties[:HeartbeatPeriodNs]
+    schedule_timer_event_at!(sm, :Heartbeat, next_heartbeat_time)
+
+    return Hsm.EventHandled
+end
+
+@on_event function (sm::ControlStateMachine, ::Top, event::Error, e::Exception)
+    value = "$error"
+    send_event_response(sm, event, "$error")
+
+    # Transition to Error state
+    # Hsm.transition!(sm, :Error)
+end
+
+@on_event function (sm::ControlStateMachine, ::Top, ::AgentOnClose, _)
+    Hsm.transition!(sm, :Exit)
 end
 
 @on_event function (sm::ControlStateMachine, ::Top, ::State, message)
@@ -134,10 +179,8 @@ end
     Hsm.transition!(sm, :Playing)
 end
 
-@on_entry function (sm::ControlStateMachine, ::Exit)
-    @info "Exiting..."
-    teardown_communications!(sm)
-    # Signal the AgentRunner to stop
+@on_entry function (sm::ControlStateMachine, state::Exit)
+    @info "Entering state: $(state)"
     throw(AgentTerminationException())
 end
 
@@ -194,12 +237,3 @@ function teardown_communications!(sm::ControlStateMachine)
     end
 end
 
-@on_event function (sm::ControlStateMachine, ::Top, ::Initialize, _)
-    setup_communications!(sm)
-    Hsm.transition!(sm, :Top)
-end
-
-# @on_event function (sm::ControlStateMachine, ::Top, ::Shutdown, _)
-#     teardown_communications!(sm)
-#     Hsm.transition!(sm, :Exit)
-# end
