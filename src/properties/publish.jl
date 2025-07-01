@@ -29,7 +29,7 @@ function publish_value(
     claim = try_claim(publication, len)
 
     # Create the message encoder
-    encoder = EventMessageEncoder(buffer(claim); position_ptr=position_ptr)
+    encoder = EventMessageEncoder(Aeron.buffer(claim); position_ptr=position_ptr)
     header = SpidersMessageCodecs.header(encoder)
 
     # Fill in the message
@@ -184,7 +184,3 @@ function close_publications!(output_streams::Vector{Aeron.Publication})
     empty!(output_streams)
     @info "Closed all publications"
 end
-
-# Export core publication interface
-export publish_value, try_claim, offer
-export setup_publications!, close_publications!

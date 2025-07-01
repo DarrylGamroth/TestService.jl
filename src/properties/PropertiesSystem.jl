@@ -7,7 +7,6 @@ using ManagedProperties
 using SnowflakeId
 using SpidersMessageCodecs
 using LightSumTypes
-using LightSumTypes
 
 # Include sub-modules in dependency order
 include("utilities.jl")
@@ -15,8 +14,13 @@ include("properties.jl")
 include("strategies.jl")
 include("publish.jl")
 
-# Import variant for type-stable dispatch
-using LightSumTypes: variant
+# Export public interface
+export Properties, ManagedProperties, PropertiesManager,
+    PublishStrategy, LightSumTypes,
+    OnUpdate, Periodic, Scheduled, RateLimited,
+    register!, unregister!, list, clear!, setup_communications!, teardown_communications!,
+    properties, is_communications_active, pub_stream_count, publication_count,
+    poller
 
 # Constants
 const DEFAULT_PUBLICATION_BUFFER_SIZE = 256
@@ -377,17 +381,6 @@ end
 
 # Call precompile function
 _precompile()
-
-# Export public interface
-export Properties, ManagedProperties, PropertiesManager,
-    PropertyConfig, PropertyConfigType,
-    PublishStrategy, OnUpdateStrategy, PeriodicStrategy, ScheduledStrategy, RateLimitedStrategy,
-    OnUpdate, Periodic, Scheduled, RateLimited,
-    register!, unregister!, list, clear!, setup_communications!, teardown_communications!,
-    setup_publications!, close_publications!,
-    properties, is_communications_active, pub_stream_count, publication_count,
-    publish_value, try_claim, offer,
-    poller, variant
 
 end # module PropertiesSystem
 

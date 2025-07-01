@@ -3,8 +3,6 @@
 # This module provides publication strategies that determine when and how
 # properties should be published based on timing and update patterns.
 
-using LightSumTypes
-
 # Individual strategy types
 struct OnUpdateStrategy end
 
@@ -154,8 +152,3 @@ end
 @inline function next_time(strategy::RateLimitedStrategy, current_time_ns::Int64)
     return current_time_ns + strategy.min_interval_ns
 end
-
-# Export strategy interface
-export PublishStrategy, OnUpdateStrategy, PeriodicStrategy, ScheduledStrategy, RateLimitedStrategy
-export OnUpdate, Periodic, Scheduled, RateLimited
-export should_publish, next_time

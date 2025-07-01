@@ -42,29 +42,29 @@
     HeartbeatPeriodNs::Int64 => (
         value => parse(Int64, get(ENV, "HEARTBEAT_PERIOD_NS", "10000000000")),
     )
-    # LogLevel::Symbol => (
-    #     value => Symbol(get(ENV, "LOG_LEVEL", "Info")),
-    #     on_set => (obj, name, val) -> begin
-    #         if !isdefined(Logging, val)
-    #             throw(ArgumentError("Invalid log level: $val"))
-    #         end
+    LogLevel::Symbol => (
+        value => Symbol(get(ENV, "LOG_LEVEL", "Info")),
+        on_set => (obj, name, val) -> begin
+            if !isdefined(Logging, val)
+                throw(ArgumentError("Invalid log level: $val"))
+            end
 
-    #         level = getfield(Logging, val)
-    #         Logging.disable_logging(level)
+            level = getfield(Logging, val)
+            Logging.disable_logging(level)
 
-    #         return val
-    #     end
-    # )
-    # GCLogging::Bool => (
-    #     value => begin
-    #         v = lowercase(get(ENV, "GC_LOGGING", "false"))
-    #         v == "true" ? true : v == "false" ? false : throw(ArgumentError("Invalid value for GC_LOGGING: $v"))
-    #     end,
-    #     on_set => (obj, name, val) -> begin
-    #         GC.enable_logging(val)
-    #         return val
-    #     end
-    # )
+            return val
+        end
+    )
+    GCLogging::Bool => (
+        value => begin
+            v = lowercase(get(ENV, "GC_LOGGING", "false"))
+            v == "true" ? true : v == "false" ? false : throw(ArgumentError("Invalid value for GC_LOGGING: $v"))
+        end,
+        on_set => (obj, name, val) -> begin
+            GC.enable_logging(val)
+            return val
+        end
+    )
     TestMatrix::Array{Float32,3} => (
         value => rand(Float32, 10, 5, 2)
     )
