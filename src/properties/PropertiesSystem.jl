@@ -349,17 +349,17 @@ function _precompile()
 
     # Publication strategy evaluation functions with LightSumTypes
     precompile(Tuple{typeof(should_publish),PublishStrategy,Int64,Int64,Int64,Int64})
-    precompile(Tuple{typeof(should_publish_impl),OnUpdateStrategy,Int64,Int64,Int64,Int64})
-    precompile(Tuple{typeof(should_publish_impl),PeriodicStrategy,Int64,Int64,Int64,Int64})
-    precompile(Tuple{typeof(should_publish_impl),ScheduledStrategy,Int64,Int64,Int64,Int64})
-    precompile(Tuple{typeof(should_publish_impl),RateLimitedStrategy,Int64,Int64,Int64,Int64})
+    precompile(Tuple{typeof(should_publish),OnUpdateStrategy,Int64,Int64,Int64,Int64})
+    precompile(Tuple{typeof(should_publish),PeriodicStrategy,Int64,Int64,Int64,Int64})
+    precompile(Tuple{typeof(should_publish),ScheduledStrategy,Int64,Int64,Int64,Int64})
+    precompile(Tuple{typeof(should_publish),RateLimitedStrategy,Int64,Int64,Int64,Int64})
 
     # Time calculation functions with LightSumTypes
     precompile(Tuple{typeof(next_time),PublishStrategy,Int64})
-    precompile(Tuple{typeof(next_time_impl),OnUpdateStrategy,Int64})
-    precompile(Tuple{typeof(next_time_impl),PeriodicStrategy,Int64})
-    precompile(Tuple{typeof(next_time_impl),ScheduledStrategy,Int64})
-    precompile(Tuple{typeof(next_time_impl),RateLimitedStrategy,Int64})
+    precompile(Tuple{typeof(next_time),OnUpdateStrategy,Int64})
+    precompile(Tuple{typeof(next_time),PeriodicStrategy,Int64})
+    precompile(Tuple{typeof(next_time),ScheduledStrategy,Int64})
+    precompile(Tuple{typeof(next_time),RateLimitedStrategy,Int64})
 
     # Strategy constructor functions
     precompile(Tuple{typeof(OnUpdate)})

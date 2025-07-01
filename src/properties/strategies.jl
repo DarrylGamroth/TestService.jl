@@ -61,9 +61,6 @@ Returns a PublishStrategy sum type for type-stable dispatch.
 """
 RateLimited(min_interval_ns::Int64) = PublishStrategy(RateLimitedStrategy(min_interval_ns))
 
-# Import variant for type-stable access
-using LightSumTypes: variant
-
 # Publishing strategy logic using type-stable dispatch through LightSumTypes
 """
     should_publish(strategy::PublishStrategy, last_published_ns::Int64, next_scheduled_ns::Int64, property_timestamp_ns::Int64, current_time_ns::Int64)
@@ -79,11 +76,11 @@ These functions are optimized for type stability and minimal allocations using L
     
     # Use LightSumTypes variant for type-stable dispatch
     concrete_strategy = variant(strategy)
-    return should_publish_impl(concrete_strategy, last_published_ns, next_scheduled_ns, property_timestamp_ns, current_time_ns)
+    return should_publish(concrete_strategy, last_published_ns, next_scheduled_ns, property_timestamp_ns, current_time_ns)
 end
 
-# Implementation functions for each strategy type
-@inline function should_publish_impl(::OnUpdateStrategy,
+# Multiple dispatch implementations for each strategy type
+@inline function should_publish(::OnUpdateStrategy,
     ::Int64,
     ::Int64,
     property_timestamp_ns::Int64,
@@ -92,7 +89,7 @@ end
     return property_timestamp_ns == current_time_ns
 end
 
-@inline function should_publish_impl(strategy::PeriodicStrategy,
+@inline function should_publish(strategy::PeriodicStrategy,
     last_published_ns::Int64,
     ::Int64,
     ::Int64,
@@ -103,7 +100,7 @@ end
     return (current_time_ns - last_published_ns) >= strategy.interval_ns
 end
 
-@inline function should_publish_impl(::ScheduledStrategy,
+@inline function should_publish(::ScheduledStrategy,
     ::Int64,
     next_scheduled_ns::Int64,
     ::Int64,
@@ -111,7 +108,7 @@ end
     return current_time_ns >= next_scheduled_ns
 end
 
-@inline function should_publish_impl(strategy::RateLimitedStrategy,
+@inline function should_publish(strategy::RateLimitedStrategy,
     last_published_ns::Int64,
     ::Int64,
     property_timestamp_ns::Int64,
@@ -138,27 +135,27 @@ These functions are optimized for type stability using LightSumTypes.
 @inline function next_time(strategy::PublishStrategy, current_time_ns::Int64)
     # Use LightSumTypes variant for type-stable dispatch
     concrete_strategy = variant(strategy)
-    return next_time_impl(concrete_strategy, current_time_ns)
+    return next_time(concrete_strategy, current_time_ns)
 end
 
-# Implementation functions for each strategy type
-@inline function next_time_impl(::OnUpdateStrategy, ::Int64)
+# Multiple dispatch implementations for each strategy type
+@inline function next_time(::OnUpdateStrategy, ::Int64)
     return -1  # OnUpdate doesn't schedule
 end
 
-@inline function next_time_impl(strategy::PeriodicStrategy, current_time_ns::Int64)
+@inline function next_time(strategy::PeriodicStrategy, current_time_ns::Int64)
     return current_time_ns + strategy.interval_ns
 end
 
-@inline function next_time_impl(strategy::ScheduledStrategy, ::Int64)
+@inline function next_time(strategy::ScheduledStrategy, ::Int64)
     return strategy.schedule_ns
 end
 
-@inline function next_time_impl(strategy::RateLimitedStrategy, current_time_ns::Int64)
+@inline function next_time(strategy::RateLimitedStrategy, current_time_ns::Int64)
     return current_time_ns + strategy.min_interval_ns
 end
 
 # Export strategy interface
 export PublishStrategy, OnUpdateStrategy, PeriodicStrategy, ScheduledStrategy, RateLimitedStrategy
 export OnUpdate, Periodic, Scheduled, RateLimited
-export should_publish, next_time, should_publish_impl, next_time_impl
+export should_publish, next_time
