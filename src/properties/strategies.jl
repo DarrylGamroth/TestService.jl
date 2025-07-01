@@ -1,5 +1,5 @@
 # Publication Strategy System
-# 
+#
 # This module provides publication strategies that determine when and how
 # properties should be published based on timing and update patterns.
 
@@ -18,7 +18,6 @@ struct RateLimitedStrategy
     min_interval_ns::Int64
 end
 
-# LightSumTypes-based strategy union for type-stable dispatch
 @sumtype PublishStrategy(
     OnUpdateStrategy,
     PeriodicStrategy,
@@ -26,7 +25,6 @@ end
     RateLimitedStrategy
 )
 
-# Convenient constructor functions that return the PublishStrategy sum type
 """
     OnUpdate()
 
@@ -59,7 +57,6 @@ Returns a PublishStrategy sum type for type-stable dispatch.
 """
 RateLimited(min_interval_ns::Int64) = PublishStrategy(RateLimitedStrategy(min_interval_ns))
 
-# Publishing strategy logic using type-stable dispatch through LightSumTypes
 """
     should_publish(strategy::PublishStrategy, last_published_ns::Int64, next_scheduled_ns::Int64, property_timestamp_ns::Int64, current_time_ns::Int64)
 
@@ -71,20 +68,20 @@ These functions are optimized for type stability and minimal allocations using L
     next_scheduled_ns::Int64,
     property_timestamp_ns::Int64,
     current_time_ns::Int64)
-    
+
     # Use LightSumTypes variant for type-stable dispatch
     concrete_strategy = variant(strategy)
     return should_publish(concrete_strategy, last_published_ns, next_scheduled_ns, property_timestamp_ns, current_time_ns)
 end
 
-# Multiple dispatch implementations for each strategy type
 @inline function should_publish(::OnUpdateStrategy,
-    ::Int64,
+    last_published_ns::Int64,
     ::Int64,
     property_timestamp_ns::Int64,
     current_time_ns::Int64)
     # Publish if the property was updated in the current loop (timestamp matches current time)
-    return property_timestamp_ns == current_time_ns
+    # AND we haven't already published this update (last_published_ns != property_timestamp_ns)
+    return property_timestamp_ns == current_time_ns && last_published_ns != property_timestamp_ns
 end
 
 @inline function should_publish(strategy::PeriodicStrategy,
@@ -95,15 +92,22 @@ end
     if last_published_ns < 0
         return true  # First publication
     end
+
+    # Don't publish again if we already published at this exact time
+    if last_published_ns == current_time_ns
+        return false
+    end
+
     return (current_time_ns - last_published_ns) >= strategy.interval_ns
 end
 
 @inline function should_publish(::ScheduledStrategy,
-    ::Int64,
+    last_published_ns::Int64,
     next_scheduled_ns::Int64,
     ::Int64,
     current_time_ns::Int64)
-    return current_time_ns >= next_scheduled_ns
+    # Only publish if we've reached the scheduled time and haven't already published at this time
+    return current_time_ns >= next_scheduled_ns && last_published_ns != current_time_ns
 end
 
 @inline function should_publish(strategy::RateLimitedStrategy,
@@ -123,7 +127,6 @@ end
     return (current_time_ns - last_published_ns) >= strategy.min_interval_ns
 end
 
-# Next scheduled time calculation
 """
     next_time(strategy::PublishStrategy, current_time_ns::Int64)
 
@@ -131,14 +134,11 @@ Calculate the next scheduled publication time for strategies that need it.
 These functions are optimized for type stability using LightSumTypes.
 """
 @inline function next_time(strategy::PublishStrategy, current_time_ns::Int64)
-    # Use LightSumTypes variant for type-stable dispatch
-    concrete_strategy = variant(strategy)
-    return next_time(concrete_strategy, current_time_ns)
+    return next_time(variant(strategy), current_time_ns)
 end
 
-# Multiple dispatch implementations for each strategy type
 @inline function next_time(::OnUpdateStrategy, ::Int64)
-    return -1  # OnUpdate doesn't schedule
+    return -1
 end
 
 @inline function next_time(strategy::PeriodicStrategy, current_time_ns::Int64)

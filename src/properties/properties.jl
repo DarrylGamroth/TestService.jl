@@ -3,13 +3,13 @@
         value => get(ENV, "BLOCK_NAME") do
             error("Environment variable BLOCK_NAME not found")
         end,
-        access => AccessMode.READABLE
+        # access => AccessMode.READABLE
     )
     NodeId::Int64 => (
         value => parse(Int64, get(ENV, "BLOCK_ID") do
             error("Environment variable BLOCK_ID not found")
         end),
-        access => AccessMode.READABLE
+        # access => AccessMode.READABLE
     )
     StatusURI::String => (
         value => get(ENV, "STATUS_URI") do
@@ -43,7 +43,7 @@
         value => parse(Int64, get(ENV, "HEARTBEAT_PERIOD_NS", "10000000000")),
     )
     LogLevel::Symbol => (
-        value => Symbol(get(ENV, "LOG_LEVEL", "Info")),
+        value => Symbol(get(ENV, "LOG_LEVEL", "Debug")),
         on_set => (obj, name, val) -> begin
             if !isdefined(Logging, val)
                 throw(ArgumentError("Invalid log level: $val"))

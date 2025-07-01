@@ -26,12 +26,12 @@ export Properties, ManagedProperties, PropertiesManager,
 const DEFAULT_PUBLICATION_BUFFER_SIZE = 256
 
 # Property publication configuration - mutable for updating timestamps
-Base.@kwdef mutable struct PropertyConfig
+mutable struct PropertyConfig
     field::Symbol
     stream::Aeron.Publication
-    strategy::PublishStrategy  # Now uses LightSumTypes strategy
-    last_published_ns::Int64 = -1
-    next_scheduled_ns::Int64 = -1
+    strategy::PublishStrategy
+    last_published_ns::Int64
+    next_scheduled_ns::Int64
 end
 
 # Type-stable publication registry using LightSumTypes
@@ -85,36 +85,30 @@ end
     setup_communications!(pm::PropertiesManager)
 
 Set up communication resources for the properties manager.
+Throws an error if communications are already active.
 """
 function setup_communications!(pm::PropertiesManager)
     if pm.communications_active
-        @warn "Communications already active for PropertiesManager"
-        return false
+        throw(ArgumentError("Communications already active for PropertiesManager"))
     end
 
     pm.pub_data_streams = setup_publications!(pm.properties, pm.client)
     pm.communications_active = true
-
-    @info "PropertiesManager communications setup complete" stream_count = length(pm.pub_data_streams)
-    return true
 end
 
 """
     teardown_communications!(pm::PropertiesManager)
 
 Tear down communication resources for the properties manager.
+Throws ArgumentError if communications are not active.
 """
 function teardown_communications!(pm::PropertiesManager)
     if !pm.communications_active
-        @warn "Communications not active for PropertiesManager"
-        return false
+        throw(ArgumentError("Communications not active for PropertiesManager"))
     end
 
     close_publications!(pm.pub_data_streams)
     pm.communications_active = false
-
-    @info "PropertiesManager communications teardown complete"
-    return true
 end
 
 # Convenience accessors
@@ -172,21 +166,22 @@ function register!(pm::PropertiesManager,
         publication,
         strategy,
         -1,        # Never published
-        -1         # No scheduled time
+        next_time(strategy, 0)
     )
     # Wrap in PropertyConfigType sum type for type-stable storage
     push!(pm.registry, PropertyConfigType(config))
-    @info "Registered property publication" field strategy pub_data_index
 end
 
 """
     unregister!(pm::PropertiesManager, field::Symbol, pub_data_index::Int)
 
 Remove a specific property-stream registration from the publication registry.
+Throws ArgumentError if pub_data_index is invalid.
+Returns the number of registrations removed.
 """
 function unregister!(pm::PropertiesManager, field::Symbol, pub_data_index::Int)
     if pub_data_index < 1 || pub_data_index > length(pm.pub_data_streams)
-        return false
+        throw(ArgumentError("Invalid PubData index $pub_data_index. Valid range: 1-$(length(pm.pub_data_streams))"))
     end
 
     publication = pm.pub_data_streams[pub_data_index]
@@ -194,36 +189,29 @@ function unregister!(pm::PropertiesManager, field::Symbol, pub_data_index::Int)
     # Find and remove matching registrations
     initial_length = length(pm.registry)
     filter!(config_wrapper -> begin
-        config = variant(config_wrapper)
-        !(config.field == field && config.stream === publication)
-    end, pm.registry)
+            config = variant(config_wrapper)
+            !(config.field == field && config.stream === publication)
+        end, pm.registry)
     removed_count = initial_length - length(pm.registry)
 
-    if removed_count > 0
-        @info "Unregistered property publication" field pub_data_index count = removed_count
-        return true
-    end
-    return false
+    return removed_count
 end
 
 """
     unregister!(pm::PropertiesManager, field::Symbol)
 
 Remove all registrations for a property field from the publication registry.
+Returns the number of registrations removed.
 """
 function unregister!(pm::PropertiesManager, field::Symbol)
     initial_length = length(pm.registry)
     filter!(config_wrapper -> begin
-        config = variant(config_wrapper)
-        config.field != field
-    end, pm.registry)
+            config = variant(config_wrapper)
+            config.field != field
+        end, pm.registry)
     removed_count = initial_length - length(pm.registry)
 
-    if removed_count > 0
-        @info "Unregistered all property publications" field count = removed_count
-        return true
-    end
-    return false
+    return removed_count
 end
 
 """
@@ -259,7 +247,6 @@ Clear all registered publications. Useful for testing or reset scenarios.
 function clear!(pm::PropertiesManager)
     count = length(pm.registry)
     empty!(pm.registry)
-    @info "Cleared all property publications" count
     return count
 end
 
@@ -273,7 +260,7 @@ Returns 1 if processed (regardless of whether published), 0 if skipped.
 @inline function process_publication!(pm::PropertiesManager, config_wrapper::PropertyConfigType)
     # Extract the concrete PropertyConfig using variant() for type-stable dispatch
     config = variant(config_wrapper)
-    
+
     # Get current time for this publication cycle
     now = time_nanos(pm.clock)
 
@@ -346,7 +333,7 @@ function _precompile()
     # Polling functions - with PropertyConfigType sum type
     precompile(Tuple{typeof(poller),PropertiesManager})
     precompile(Tuple{typeof(process_publication!),PropertiesManager,PropertyConfigType})
-    
+
     # LightSumTypes variant function for type-stable dispatch
     precompile(Tuple{typeof(variant),PropertyConfigType})
     precompile(Tuple{typeof(variant),PublishStrategy})
