@@ -2,26 +2,15 @@ module TestService
 
 using Aeron
 using Agent
-using Clocks
 using EnumX
-using Hsm
-using ManagedProperties
-using SnowflakeId
-using SpidersFragmentFilters
-using SpidersMessageCodecs
-using StaticArrays
-using TimerWheels
-using UnsafeArrays
-using ValSplit
+using Logging
 using AllocProfilerCheck
 
 const DEFAULT_FRAGMENT_COUNT_LIMIT = 10
 
-include("properties.jl")
 include("agent.jl")
-include("states.jl")
 
-export main, @allocated_barrier
+export main
 
 function (@main)(ARGS)
     # md = Aeron.MediaDriver.launch()
@@ -30,7 +19,7 @@ function (@main)(ARGS)
     Aeron.Context() do context
         Aeron.Client(context) do client
             # Initialize the agent
-            agent = ControlStateMachine(client)
+            agent = RtcAgent(client)
 
             # Start the agent
             runner = AgentRunner(BackoffIdleStrategy(), agent)
