@@ -3,9 +3,9 @@ module PropertiesSystem
 using Aeron
 using Clocks
 using Logging
-using ManagedProperties
 using SnowflakeId
 using SpidersMessageCodecs
+using StaticKV
 using LightSumTypes
 
 # Include sub-modules in dependency order
@@ -14,8 +14,11 @@ include("properties.jl")
 include("strategies.jl")
 include("publish.jl")
 
+# Import shared messaging utilities
+using ..MessagingSystem
+
 # Export public interface
-export Properties, ManagedProperties, PropertiesManager,
+export Properties, StaticKV, PropertiesManager,
     PublishStrategy, LightSumTypes,
     OnUpdate, Periodic, Scheduled, RateLimited,
     register!, unregister!, list, clear!, setup_communications!, teardown_communications!,
@@ -44,7 +47,7 @@ end
 A manager that encapsulates properties along with their associated communication resources
 and publication management. Provides a unified interface for property system operations.
 """
-mutable struct PropertiesManager{P<:Properties,C<:AbstractClock,I<:SnowflakeIdGenerator}
+mutable struct PropertiesManager{P,C<:AbstractClock,I<:SnowflakeIdGenerator}
     client::Aeron.Client
     # Core components
     properties::P
@@ -65,7 +68,7 @@ mutable struct PropertiesManager{P<:Properties,C<:AbstractClock,I<:SnowflakeIdGe
     function PropertiesManager(client::Aeron.Client,
         properties::P,
         clock::C,
-        id_generator::I) where {P<:Properties,C<:AbstractClock,I<:SnowflakeIdGenerator}
+        id_generator::I) where {P,C<:AbstractClock,I<:SnowflakeIdGenerator}
         new{P,C,I}(
             client,
             properties,
@@ -275,7 +278,7 @@ Returns 1 if processed (regardless of whether published), 0 if skipped.
     end
 
     # Publish the current property value
-    publish_value(
+    MessagingSystem.publish_value(
         config.field,
         pm.properties[config.field],
         pm.properties[:Name],

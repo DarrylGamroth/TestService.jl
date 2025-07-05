@@ -1,0 +1,6 @@
+name = "Aeron"
+uuid = "13a889dc-e8a9-450d-af8d-8478951538b2"
+version = "0.1.1"
+
+[compat]
+julia = "1.6"

@@ -4,7 +4,7 @@ using Aeron
 using Agent
 using EnumX
 using Logging
-using AllocProfilerCheck
+# using AllocProfilerCheck
 
 const DEFAULT_FRAGMENT_COUNT_LIMIT = 10
 

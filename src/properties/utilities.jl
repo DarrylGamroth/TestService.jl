@@ -1,6 +1,6 @@
-# Helper macro to generate fields from SUB_DATA_URI_* environment variables
-macro generate_sub_data_uri_fields()
-    fields = []
+# Helper macro to generate keys from SUB_DATA_URI_* environment variables
+macro generate_sub_data_uri_keys()
+    keys = []
     connection_count = 0
 
     # Scan environment at macro expansion time
@@ -13,10 +13,10 @@ macro generate_sub_data_uri_fields()
             stream_field = Symbol("SubDataStreamID$(idx)")
 
             # Add URI field (read-only)
-            push!(fields, :(
+            push!(keys, :(
                 $uri_field::String => (
-                    value => $value,
-                    access => AccessMode.READABLE
+                    $value;
+                    access = AccessMode.READABLE
                 )
             ))
 
@@ -24,10 +24,10 @@ macro generate_sub_data_uri_fields()
             stream_key = "SUB_DATA_STREAM_$(idx)"
             if haskey(ENV, stream_key)
                 stream_value = parse(Int, ENV[stream_key])
-                push!(fields, :(
+                push!(keys, :(
                     $stream_field::Int64 => (
-                        value => $stream_value,
-                        access => AccessMode.READABLE
+                        $stream_value;
+                        access = AccessMode.READABLE
                     )
                 ))
             end
@@ -35,19 +35,19 @@ macro generate_sub_data_uri_fields()
     end
 
     # Add the sub connection count field
-    push!(fields, :(
+    push!(keys, :(
         SubDataConnectionCount::Int64 => (
-            value => $connection_count,
-            access => AccessMode.READABLE
+            $connection_count;
+            access = AccessMode.READABLE
         )
     ))
 
-    return esc(Expr(:block, fields...))
+    return esc(Expr(:block, keys...))
 end
 
-# Helper macro to generate fields from PUB_DATA_URI_* environment variables
-macro generate_pub_data_uri_fields()
-    fields = []
+# Helper macro to generate keys from PUB_DATA_URI_* environment variables
+macro generate_pub_data_uri_keys()
+    keys = []
     connection_count = 0
 
     # Scan environment at macro expansion time
@@ -60,10 +60,10 @@ macro generate_pub_data_uri_fields()
             stream_field = Symbol("PubDataStreamID$(idx)")
 
             # Add URI field (read-only)
-            push!(fields, :(
+            push!(keys, :(
                 $uri_field::String => (
-                    value => $value,
-                    access => AccessMode.READABLE
+                    $value;
+                    access = AccessMode.READABLE
                 )
             ))
 
@@ -71,10 +71,10 @@ macro generate_pub_data_uri_fields()
             stream_key = "PUB_DATA_STREAM_$(idx)"
             if haskey(ENV, stream_key)
                 stream_value = parse(Int, ENV[stream_key])
-                push!(fields, :(
+                push!(keys, :(
                     $stream_field::Int64 => (
-                        value => $stream_value,
-                        access => AccessMode.READABLE
+                        $stream_value;
+                        access = AccessMode.READABLE
                     )
                 ))
             end
@@ -82,12 +82,12 @@ macro generate_pub_data_uri_fields()
     end
 
     # Add the pub connection count field
-    push!(fields, :(
+    push!(keys, :(
         PubDataConnectionCount::Int64 => (
-            value => $connection_count,
-            access => AccessMode.READABLE
+            $connection_count;
+            access = AccessMode.READABLE
         )
     ))
 
-    return esc(Expr(:block, fields...))
+    return esc(Expr(:block, keys...))
 end

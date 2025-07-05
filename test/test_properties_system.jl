@@ -1,3 +1,15 @@
+# Local Properties definition for testing
+using StaticKV
+
+@kvstore TestProperties begin
+    Name::String => "TestNode"
+    NodeId::Int64 => 42
+    HeartbeatPeriodNs::Int64 => 5_000_000_000
+    TestMatrix::Matrix{Float64} => [1.0 2.0; 3.0 4.0]
+    PropertiesSystem.@generate_sub_data_uri_keys
+    PropertiesSystem.@generate_pub_data_uri_keys
+end
+
 function test_properties_system()
     @testset "PropertiesSystem Module Tests" begin
         @testset "Strategy Types and Functions" begin
@@ -63,11 +75,11 @@ function test_properties_system()
             client = Aeron.Client(Aeron.Context())
             clock = CachedEpochClock(EpochClock())
             id_generator = SnowflakeIdGenerator(1, clock)
-            properties = Properties(clock)
+            properties = TestProperties(clock)
             pm = PropertiesManager(client, properties, clock, id_generator)
 
             # Set up communications
-            setup_communications!(pm)
+            PropertiesSystem.setup_communications!(pm)
 
             @testset "Initial Registry State After Registration" begin
                 clear!(pm)
@@ -146,7 +158,7 @@ function test_properties_system()
                 # First publication should happen and update state
                 fetch!(clock)
                 current_time = time_nanos(clock)
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1
                 
                 # Check state after first publication
@@ -156,7 +168,7 @@ function test_properties_system()
                 @test config.next_scheduled_ns == current_time + 1_000_000  # Should be current + interval
                 
                 # Second call shouldn't publish (too soon)
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 0
                 
                 # State should remain the same
@@ -182,7 +194,7 @@ function test_properties_system()
                 original_value = properties[:NodeId]
                 properties[:NodeId] = original_value + 1  # This gets timestamp = current_time
                 
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1
                 
                 # Check state after publication
@@ -192,7 +204,7 @@ function test_properties_system()
                 @test config.next_scheduled_ns == -1  # OnUpdate doesn't use scheduling
                 
                 # Immediate second call shouldn't publish (same property timestamp)
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 0
                 
                 # State should remain the same
@@ -217,7 +229,7 @@ function test_properties_system()
                 original_value = properties[:NodeId]
                 properties[:NodeId] = original_value + 1
                 
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1
                 
                 # Check state after publication
@@ -228,7 +240,7 @@ function test_properties_system()
                 
                 # Update property again immediately - shouldn't publish (rate limited)
                 properties[:NodeId] = original_value + 2
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 0
                 
                 # State should remain the same (no publication occurred)
@@ -253,7 +265,7 @@ function test_properties_system()
                 @test config.next_scheduled_ns == schedule_time
                 
                 # Before scheduled time - shouldn't publish
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 0
                 
                 # State should remain unchanged
@@ -267,7 +279,7 @@ function test_properties_system()
                 fetch!(clock)
                 new_current_time = time_nanos(clock)
                 
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1
                 
                 # Check state after publication
@@ -277,7 +289,7 @@ function test_properties_system()
                 @test config.next_scheduled_ns == schedule_time  # Remains the original scheduled time
                 
                 # Immediate second call shouldn't publish
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 0
                 
                 # State should remain the same
@@ -318,7 +330,7 @@ function test_properties_system()
                 properties[:NodeId] = properties[:NodeId] + 1
                 properties[:Name] = properties[:Name] * "_test"
                 
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 3  # All should publish (Periodic first time, OnUpdate+RateLimited property updated)
                 
                 # Verify all states were updated
@@ -345,7 +357,7 @@ function test_properties_system()
             client = Aeron.Client(Aeron.Context())
             clock = CachedEpochClock(EpochClock())
             id_generator = SnowflakeIdGenerator(1, clock)
-            properties = Properties(clock)
+            properties = TestProperties(clock)
 
             # Create PropertiesManager
             pm = PropertiesManager(client, properties, clock, id_generator)
@@ -364,29 +376,29 @@ function test_properties_system()
 
             @testset "Convenience Accessors" begin
                 @test PropertiesSystem.properties(pm) === properties
-                @test is_communications_active(pm) == false
+                @test PropertiesSystem.is_communications_active(pm) == false
                 @test pub_stream_count(pm) == 0
                 @test publication_count(pm) == 0
             end
 
             @testset "Communication Setup/Teardown Error Handling" begin
                 # setup_communications! should throw error if already active
-                setup_communications!(pm)  # First setup should succeed
-                @test is_communications_active(pm) == true
+                PropertiesSystem.setup_communications!(pm)  # First setup should succeed
+                @test PropertiesSystem.is_communications_active(pm) == true
                 
                 # Second setup should throw ArgumentError
-                @test_throws ArgumentError setup_communications!(pm)
+                @test_throws ArgumentError PropertiesSystem.setup_communications!(pm)
                 
                 # teardown_communications! should succeed
-                teardown_communications!(pm)  # Should succeed
-                @test is_communications_active(pm) == false
+                PropertiesSystem.teardown_communications!(pm)  # Should succeed
+                @test PropertiesSystem.is_communications_active(pm) == false
                 
                 # Second teardown should throw ArgumentError  
-                @test_throws ArgumentError teardown_communications!(pm)
+                @test_throws ArgumentError PropertiesSystem.teardown_communications!(pm)
                 
                 # Setup again should work after teardown
-                setup_communications!(pm)  # Should succeed again
-                @test is_communications_active(pm) == true
+                PropertiesSystem.setup_communications!(pm)  # Should succeed again
+                @test PropertiesSystem.is_communications_active(pm) == true
             end
         end
 
@@ -394,11 +406,11 @@ function test_properties_system()
             client = Aeron.Client(Aeron.Context())
             clock = CachedEpochClock(EpochClock())
             id_generator = SnowflakeIdGenerator(1, clock)
-            properties = Properties(clock)
+            properties = TestProperties(clock)
             pm = PropertiesManager(client, properties, clock, id_generator)
 
             # Set up communications which will use our mocked Aeron.add_publication
-            setup_communications!(pm)
+            PropertiesSystem.setup_communications!(pm)
 
             @testset "Registration" begin
                 # Test valid registrations
@@ -475,11 +487,11 @@ function test_properties_system()
             client = Aeron.Client(Aeron.Context())
             clock = CachedEpochClock(EpochClock())
             id_generator = SnowflakeIdGenerator(1, clock)
-            properties = Properties(clock)
+            properties = TestProperties(clock)
             pm = PropertiesManager(client, properties, clock, id_generator)
 
             # Set up communications which will use our mocked Aeron.add_publication
-            setup_communications!(pm)
+            PropertiesSystem.setup_communications!(pm)
 
             # Register some publications using smaller properties to avoid buffer overflow
             register!(pm, :NodeId, 1, OnUpdate())          # Int64 - small
@@ -489,19 +501,19 @@ function test_properties_system()
             @testset "Poller Zero Allocations" begin
                 # Warm up the functions first
                 for _ in 1:10
-                    poller(pm)
+                    PropertiesSystem.poller(pm)
                 end
 
                 # Force compilation of all paths
                 GC.gc()  # Clean up any compilation artifacts
 
                 # Test that poller doesn't allocate
-                allocs = @allocated poller(pm)
+                allocs = @allocated PropertiesSystem.poller(pm)
                 @test allocs == 0
 
                 # Test multiple calls to ensure consistency
                 for _ in 1:5
-                    allocs = @allocated poller(pm)
+                    allocs = @allocated PropertiesSystem.poller(pm)
                     @test allocs == 0
                 end
             end
@@ -580,11 +592,11 @@ function test_properties_system()
             client = Aeron.Client(Aeron.Context())
             clock = CachedEpochClock(EpochClock())
             id_generator = SnowflakeIdGenerator(1, clock)
-            properties = Properties(clock)
+            properties = TestProperties(clock)
             pm = PropertiesManager(client, properties, clock, id_generator)
 
             # Set up communications which will use our mocked Aeron.add_publication
-            setup_communications!(pm)
+            PropertiesSystem.setup_communications!(pm)
 
             # Register publications with different strategies using smaller properties
             register!(pm, :NodeId, 1, OnUpdate())
@@ -622,11 +634,11 @@ function test_properties_system()
             client = Aeron.Client(Aeron.Context())
             clock = CachedEpochClock(EpochClock())
             id_generator = SnowflakeIdGenerator(1, clock)
-            properties = Properties(clock)
+            properties = TestProperties(clock)
             pm = PropertiesManager(client, properties, clock, id_generator)
 
             # Set up communications
-            setup_communications!(pm)
+            PropertiesSystem.setup_communications!(pm)
 
             @testset "OnUpdate Strategy Integration" begin
                 # Clear any existing registrations and ensure clean state
@@ -640,7 +652,7 @@ function test_properties_system()
                 register!(pm, :NodeId, 1, OnUpdate())
                 
                 # Initial state - property timestamp should be old (0) vs current clock time
-                initial_publications = poller(pm)
+                initial_publications = PropertiesSystem.poller(pm)
                 @test initial_publications == 0
 
                 # Simulate agent loop: fetch clock, then update property within same time
@@ -649,17 +661,17 @@ function test_properties_system()
                 properties[:NodeId] = original_value + 1  # Property gets timestamp = current time
                 
                 # Now poller should publish once (property timestamp matches current clock time)
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1
 
                 # Subsequent calls in same loop iteration should not publish again
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 0
 
                 # Next loop iteration: advance clock, then update property
                 fetch!(clock)  # Advance to next time
                 properties[:NodeId] = original_value + 2  # Property gets new timestamp
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1
             end
 
@@ -670,11 +682,11 @@ function test_properties_system()
                 register!(pm, :HeartbeatPeriodNs, 1, Periodic(1_000_000))  # 1ms
                 
                 # First publication should happen immediately
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1
 
                 # Subsequent calls within the interval should not publish
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 0
 
                 # Sleep a bit and update clock to pass the interval
@@ -682,13 +694,13 @@ function test_properties_system()
                 fetch!(clock)
                 
                 # Now should publish again
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1
 
                 # Test multiple intervals
                 sleep(0.003)  # 3ms
                 fetch!(clock)
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1
             end
 
@@ -702,19 +714,19 @@ function test_properties_system()
                 fetch!(clock)
                 original_value = properties[:NodeId]
                 properties[:NodeId] = original_value + 10  # Property gets current timestamp
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1  # First publication should work
 
                 # Update property again in same loop - should not publish (rate limited)
                 properties[:NodeId] = original_value + 11
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 0
 
                 # Wait for rate limit to pass, then simulate next agent loop
                 sleep(0.002)  # 2ms
                 fetch!(clock)  # Advance clock (like next agent loop iteration)
                 properties[:NodeId] = original_value + 12  # Update with new timestamp
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1
             end
 
@@ -729,7 +741,7 @@ function test_properties_system()
                 register!(pm, :Name, 1, Scheduled(schedule_time))
                 
                 # Should not publish before scheduled time
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 0
 
                 # Sleep past the scheduled time and advance clock
@@ -737,11 +749,11 @@ function test_properties_system()
                 fetch!(clock)
                 
                 # Should publish now
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1
 
                 # Should not publish again
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 0
             end
 
@@ -760,7 +772,7 @@ function test_properties_system()
                 # First check - only Periodic should publish (first time, never published before)
                 # OnUpdate won't publish (property not recently updated)
                 # RateLimited won't publish (property not recently updated)
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1  # Only Periodic publishes first time
 
                 # Now simulate agent loop with property updates
@@ -775,11 +787,11 @@ function test_properties_system()
                 
                 # Should publish OnUpdate (property changed) and RateLimited (property changed)
                 # Periodic shouldn't publish yet (interval not passed)
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 2
 
                 # Immediate second call - nothing should publish
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 0
 
                 # Wait for intervals to pass, then simulate next agent loop
@@ -787,7 +799,7 @@ function test_properties_system()
                 fetch!(clock)  # Next agent loop
                 
                 # Only Periodic should publish now (others need property updates)
-                publications = poller(pm)
+                publications = PropertiesSystem.poller(pm)
                 @test publications == 1
             end
 
@@ -817,7 +829,7 @@ function test_properties_system()
                     end
                     
                     # Call poller (like agent does)
-                    work_count = poller(pm)
+                    work_count = PropertiesSystem.poller(pm)
                     push!(work_counts, work_count)
                     total_publications += work_count
                     

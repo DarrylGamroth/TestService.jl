@@ -38,7 +38,7 @@ Schedule a timer to fire at the given absolute deadline with the associated even
 Returns the timer ID for potential cancellation.
 """
 function schedule_timer_at!(tm::TimerManager, deadline::Int64, event::Symbol)
-    timer_id = TimerWheels.schedule_timer(tm.wheel, deadline)
+    timer_id = TimerWheels.schedule_timer!(tm.wheel, deadline)
     tm.event_map[timer_id] = event
     return timer_id
 end

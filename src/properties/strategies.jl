@@ -69,9 +69,7 @@ These functions are optimized for type stability and minimal allocations using L
     property_timestamp_ns::Int64,
     current_time_ns::Int64)
 
-    # Use LightSumTypes variant for type-stable dispatch
-    concrete_strategy = variant(strategy)
-    return should_publish(concrete_strategy, last_published_ns, next_scheduled_ns, property_timestamp_ns, current_time_ns)
+    return should_publish(variant(strategy), last_published_ns, next_scheduled_ns, property_timestamp_ns, current_time_ns)
 end
 
 @inline function should_publish(::OnUpdateStrategy,

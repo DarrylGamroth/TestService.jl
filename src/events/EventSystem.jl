@@ -9,15 +9,17 @@ using Hsm
 using SnowflakeId
 using SpidersFragmentFilters
 using SpidersMessageCodecs
+using StaticKV
 using UnsafeArrays
 using ..PropertiesSystem
 
 using ..TimerSystem
+using ..MessagingSystem
 
 import Agent.AgentTerminationException
 
 export EventManager, dispatch!, handle_timer_event!,
-    teardown_communications!,
+    setup_communications!, teardown_communications!, is_communications_active,
     send_event_response,
     input_stream_poller, control_poller, poller,
     schedule_timer_event!, schedule_timer_event_at!, cancel_timer!,
@@ -58,6 +60,20 @@ Event management system that encapsulates event dispatch, communications, and st
         timer_manager = TimerManager(clock)
         new{P,C,I}(client, 0, Ref{Int64}(0), nothing, properties, clock, id_gen, timer_manager)
     end
+end
+
+"""
+    setup_communications!(em::EventManager)
+
+Set up communication resources for the event manager.
+Throws an error if communications are already active.
+"""
+function setup_communications!(em::EventManager)
+    if em.comms !== nothing
+        throw(ArgumentError("Communications already active for EventManager"))
+    end
+
+    em.comms = CommunicationResources(em)
 end
 
 """
@@ -152,52 +168,7 @@ function data_handler(em::EventManager, buffer, _)
     nothing
 end
 
-function decode_message(buffer, position_ptr)
-    # Decode a single message from the buffer
-    message = EventMessageDecoder(buffer; position_ptr=position_ptr)
-    header = SpidersMessageCodecs.header(message)
-    correlation_id = SpidersMessageCodecs.correlationId(header)
-    event = SpidersMessageCodecs.key(message, Symbol)
-
-    return message, correlation_id, event
-end
-
 # Communication and message sending functions
-function offer(p, buf, max_attempts=10)
-    attempts = max_attempts
-    while attempts > 0
-        result = Aeron.offer(p, buf)
-        if result > 0
-            return
-        elseif result in (Aeron.PUBLICATION_BACK_PRESSURED, Aeron.PUBLICATION_ADMIN_ACTION)
-            continue
-        elseif result == Aeron.PUBLICATION_NOT_CONNECTED
-            throw(ErrorException("Publication not connected"))
-        elseif result == Aeron.PUBLICATION_ERROR
-            Aeron.throwerror()
-        end
-        attempts -= 1
-    end
-end
-
-function try_claim(p, length, max_attempts=10)
-    attempts = max_attempts
-    while attempts > 0
-        claim, result = Aeron.try_claim(p, length)
-        if result > 0
-            return claim
-        elseif result in (Aeron.PUBLICATION_BACK_PRESSURED, Aeron.PUBLICATION_ADMIN_ACTION)
-            attempts -= 1
-            continue
-        elseif result == Aeron.PUBLICATION_NOT_CONNECTED
-            throw(ErrorException("Publication not connected"))
-        elseif result == Aeron.PUBLICATION_ERROR
-            Aeron.throwerror()
-        end
-        attempts -= 1
-    end
-    throw(ErrorException("Failed to claim buffer after $max_attempts attempts"))
-end
 
 # Messaging and serialization interface
 @inline function send_event_response(em::EventManager, event, value)
@@ -206,94 +177,17 @@ end
         return
     end
 
-    agent_name = em.properties[:Name]
-    response = EventMessageEncoder(em.comms.buf; position_ptr=em.position_ptr)
-    header = SpidersMessageCodecs.header(response)
-
-    SpidersMessageCodecs.timestampNs!(header, time_nanos(em.clock))
-    SpidersMessageCodecs.correlationId!(header, em.correlation_id)
-    SpidersMessageCodecs.tag!(header, agent_name)
-    SpidersMessageCodecs.key!(response, event)
-    encode(response, value)
-
-    offer(em.comms.status_stream, convert(AbstractArray{UInt8}, response))
-    nothing
-end
-
-@inline function send_event_response(em::EventManager, event, value::AbstractArray)
-    if em.comms === nothing
-        @warn "Cannot send event response: communication resources not initialized"
-        return
-    end
-
-    agent_name = em.properties[:Name]
-    # Encode the buffer in reverse order
-    len = sizeof(eltype(value)) * length(value)
-
-    # Use the SBE encoder to create a TensorMessage header
-    tensor = TensorMessageEncoder(em.comms.buf; position_ptr=em.position_ptr)
-    header = SpidersMessageCodecs.header(tensor)
-    SpidersMessageCodecs.timestampNs!(header, time_nanos(em.clock))
-    SpidersMessageCodecs.correlationId!(header, em.correlation_id)
-    SpidersMessageCodecs.tag!(header, agent_name)
-    SpidersMessageCodecs.format!(tensor, convert(SpidersMessageCodecs.Format.SbeEnum, eltype(value)))
-    SpidersMessageCodecs.majorOrder!(tensor, SpidersMessageCodecs.MajorOrder.COLUMN)
-    SpidersMessageCodecs.dims!(tensor, Int32.(size(value)))
-    SpidersMessageCodecs.origin!(tensor, nothing)
-    SpidersMessageCodecs.values_length!(tensor, len)
-    # values_length! doesn't increment the position, so we need to do it manually
-    SpidersMessageCodecs.sbe_position!(tensor, sbe_position(tensor) + SpidersMessageCodecs.values_header_length(tensor))
-    tensor_message = convert(AbstractArray{UInt8}, tensor)
-    len += length(tensor_message)
-
-    response = EventMessageEncoder(em.comms.buf, sbe_position(tensor); position_ptr=em.position_ptr)
-    header = SpidersMessageCodecs.header(response)
-    SpidersMessageCodecs.timestampNs!(header, time_nanos(em.clock))
-    SpidersMessageCodecs.correlationId!(header, em.correlation_id)
-    SpidersMessageCodecs.tag!(header, agent_name)
-    SpidersMessageCodecs.format!(response, SpidersMessageCodecs.Format.SBE)
-    SpidersMessageCodecs.key!(response, event)
-    SpidersMessageCodecs.value_length!(response, len)
-    # value_length! doesn't increment the position, so we need to do it manually
-    SpidersMessageCodecs.sbe_position!(response, sbe_position(response) + SpidersMessageCodecs.value_header_length(response))
-    response_message = convert(AbstractArray{UInt8}, response)
-
-    # Offer in the correct order
-    offer(em.comms.status_stream,
-        (
-            response_message,
-            tensor_message,
-            vec(reinterpret(UInt8, value))
-        )
+    # Use shared utility with consistent parameter ordering
+    MessagingSystem.send_event_response(
+        event,                    # field/event
+        value,                    # value - dispatch handles scalar vs array
+        em.properties[:Name],     # agent_name
+        em.correlation_id,        # correlation_id
+        time_nanos(em.clock),     # timestamp_ns
+        em.comms.status_stream,   # publication
+        em.comms.buf,             # buffer
+        em.position_ptr           # position_ptr
     )
-    nothing
-end
-
-@inline function send_event_response(em::EventManager, event, value::T) where {T<:Union{AbstractString,Real,Symbol,Tuple}}
-    if em.comms === nothing
-        @warn "Cannot send event response: communication resources not initialized"
-        return
-    end
-
-    agent_name = em.properties[:Name]
-    len = sbe_encoded_length(MessageHeader) +
-          sbe_block_length(EventMessage) +
-          SpidersMessageCodecs.value_header_length(EventMessage) +
-          sizeof(value)
-
-    claim = try_claim(em.comms.status_stream, len)
-    response = EventMessageEncoder(buffer(claim); position_ptr=em.position_ptr)
-    header = SpidersMessageCodecs.header(response)
-
-    SpidersMessageCodecs.timestampNs!(header, time_nanos(em.clock))
-    SpidersMessageCodecs.correlationId!(header, em.correlation_id)
-    SpidersMessageCodecs.tag!(header, agent_name)
-    SpidersMessageCodecs.key!(response, event)
-    encode(response, value)
-
-    Aeron.commit(claim)
-
-    nothing
 end
 
 # Timer convenience functions for EventManager
@@ -397,18 +291,18 @@ Create and set up communication resources for the event manager using its client
 """
 function CommunicationResources(em::EventManager)
     p = em.properties
-    status_uri = get_property(p, :StatusURI)
-    status_stream_id = get_property(p, :StatusStreamID)
+    status_uri = p[:StatusURI]
+    status_stream_id = p[:StatusStreamID]
     status_stream = Aeron.add_publication(em.client, status_uri, status_stream_id)
 
-    control_uri = get_property(p, :ControlURI)
-    control_stream_id = get_property(p, :ControlStreamID)
+    control_uri = p[:ControlURI]
+    control_stream_id = p[:ControlStreamID]
     control_stream = Aeron.add_subscription(em.client, control_uri, control_stream_id)
 
     fragment_handler = Aeron.FragmentHandler(control_handler, em)
 
-    if is_set(p, :ControlStreamFilter)
-        message_filter = SpidersTagFragmentFilter(fragment_handler, get_property(p, :ControlStreamFilter))
+    if isset(p, :ControlFilter)
+        message_filter = SpidersTagFragmentFilter(fragment_handler, p[:ControlFilter])
         control_fragment_handler = Aeron.FragmentAssembler(message_filter)
     else
         control_fragment_handler = Aeron.FragmentAssembler(fragment_handler)
@@ -418,7 +312,7 @@ function CommunicationResources(em::EventManager)
     input_streams = Vector{Aeron.Subscription}(undef, 0)
 
     # Get the number of sub data connections from properties
-    sub_data_connection_count = get_property(p, :SubDataConnectionCount)
+    sub_data_connection_count = p[:SubDataConnectionCount]
 
     # Create subscriptions for each sub data URI/stream pair
     for i in 1:sub_data_connection_count
@@ -426,8 +320,8 @@ function CommunicationResources(em::EventManager)
         stream_prop = Symbol("SubDataStreamID$(i)")
 
         # Read URI and stream ID from properties
-        uri = get_property(p, uri_prop)
-        stream_id = get_property(p, stream_prop)
+        uri = p[uri_prop]
+        stream_id = p[stream_prop]
 
         subscription = Aeron.add_subscription(em.client, uri, stream_id)
         push!(input_streams, subscription)
@@ -447,6 +341,14 @@ end
 include("utilities.jl")  # Import utility functions
 include("states/states.jl")  # Import state machine states
 
+# Convenience accessors
+"""
+    is_communications_active(em::EventManager)
+
+Check if communications are currently active.
+"""
+is_communications_active(em::EventManager) = em.comms !== nothing
+
 # Precompile statements for EventSystem
 function _precompile()
     # EventManager construction - using generic types to avoid module dependencies
@@ -463,7 +365,9 @@ function _precompile()
     precompile(Tuple{typeof(handle_timer_event!),EventManager,Int64,Int64})
 
     # Communication setup/teardown
+    precompile(Tuple{typeof(setup_communications!),EventManager})
     precompile(Tuple{typeof(teardown_communications!),EventManager})
+    precompile(Tuple{typeof(is_communications_active),EventManager})
     precompile(Tuple{typeof(CommunicationResources),EventManager})
 
     # Polling functions

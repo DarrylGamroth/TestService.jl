@@ -8,10 +8,12 @@ using SnowflakeId
 using UnsafeArrays
 
 # Import property system
+include("messaging/MessagingSystem.jl")
 include("properties/PropertiesSystem.jl")
 include("timer/TimerSystem.jl")
 include("events/EventSystem.jl")
 
+using .MessagingSystem
 using .PropertiesSystem
 using .EventSystem
 using .EventSystem: CommunicationResources

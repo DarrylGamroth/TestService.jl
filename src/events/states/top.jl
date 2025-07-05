@@ -72,18 +72,18 @@ end
 end
 
 # Property publication event handlers
-@on_event function (sm::EventManager, ::Top, ::RegisterPropertyPublication, message)
-    PropertiesSystem.handle_register_publication_event(sm, message)
-    return Hsm.EventHandled
-end
+# @on_event function (sm::EventManager, ::Top, ::RegisterPropertyPublication, message)
+#     PropertiesSystem.handle_register_publication_event(sm, message)
+#     return Hsm.EventHandled
+# end
 
-@on_event function (sm::EventManager, ::Top, ::UnregisterPropertyPublication, message)
-    PropertiesSystem.handle_unregister_publication_event(sm, message)
-    return Hsm.EventHandled
-end
+# @on_event function (sm::EventManager, ::Top, ::UnregisterPropertyPublication, message)
+#     PropertiesSystem.handle_unregister_publication_event(sm, message)
+#     return Hsm.EventHandled
+# end
 
-@on_event function (sm::EventManager, ::Top, ::ListPropertyPublications, _)
-    publications = PropertiesSystem.list()
-    send_event_response(sm, :PropertyPublications, publications)
-    return Hsm.EventHandled
-end
+# @on_event function (sm::EventManager, ::Top, ::ListPropertyPublications, _)
+#     publications = PropertiesSystem.list()
+#     send_event_response(sm, :PropertyPublications, publications)
+#     return Hsm.EventHandled
+# end
