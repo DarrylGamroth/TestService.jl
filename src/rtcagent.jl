@@ -52,12 +52,7 @@ struct CommunicationResources
     # buffer
     buf::Vector{UInt8}
 
-    function CommunicationResources(
-        client::Aeron.Client, 
-        p::Properties, 
-        control_fragment_handler::Aeron.FragmentAssembler,
-        input_fragment_handler::Aeron.FragmentAssembler
-    )
+    function CommunicationResources(client::Aeron.Client, p::Properties, clientd)
         status_uri = p[:StatusURI]
         status_stream_id = p[:StatusStreamID]
         status_stream = Aeron.add_publication(client, status_uri, status_stream_id)
@@ -66,6 +61,16 @@ struct CommunicationResources
         control_stream_id = p[:ControlStreamID]
         control_stream = Aeron.add_subscription(client, control_uri, control_stream_id)
 
+        fragment_handler = Aeron.FragmentHandler(control_handler, clientd)
+
+        if isset(p, :ControlFilter)
+            message_filter = SpidersTagFragmentFilter(fragment_handler, p[:ControlFilter])
+            control_fragment_handler = Aeron.FragmentAssembler(message_filter)
+        else
+            control_fragment_handler = Aeron.FragmentAssembler(fragment_handler)
+        end
+
+        input_fragment_handler = Aeron.FragmentAssembler(Aeron.FragmentHandler(data_handler, clientd))
         input_streams = Aeron.Subscription[]
 
         # Get the number of sub data connections from properties
