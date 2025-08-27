@@ -7,6 +7,7 @@ export HEARTBEAT_PERIOD_NS=10000000000
 export BLOCK_NAME="TestService"
 export BLOCK_ID=367
 export LOG_LEVEL="Debug"
+export GC_LOGGING=true
 
 export STATUS_URI="aeron:udp?endpoint=0.0.0.0:40123"
 export STATUS_STREAM_ID=1
