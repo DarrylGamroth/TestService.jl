@@ -5,7 +5,9 @@ function test_exceptions()
         # Test that exceptions are thrown in proper error scenarios
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 
                 # Test that proper errors are thrown for invalid operations
                 @test_throws CommunicationNotInitializedError get_publication(agent, 1)
@@ -22,7 +24,9 @@ function test_exceptions()
         # Basic test that error handling works without exposing internal types
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 
                 # This should throw an informative error
                 try

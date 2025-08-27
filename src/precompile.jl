@@ -16,8 +16,8 @@ function _precompile_testservice()
     # =============================================================================
     
     # RtcAgent construction
-    precompile(Tuple{typeof(RtcAgent),Aeron.Client,ClockType})
-    precompile(Tuple{typeof(RtcAgent),Aeron.Client})
+    precompile(Tuple{typeof(RtcAgent),Aeron.Client,PropertiesType,ClockType})
+    precompile(Tuple{typeof(RtcAgent),Aeron.Client,PropertiesType})
     
     # Properties construction and access
     precompile(Tuple{typeof(Properties),ClockType})

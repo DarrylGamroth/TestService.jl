@@ -26,7 +26,9 @@ function test_timers()
     @testset "Timer Integration with Agent" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 
                 # Test that agent has timer system
                 @test !isnothing(agent.timers)

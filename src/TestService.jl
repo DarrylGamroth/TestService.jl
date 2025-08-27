@@ -1,10 +1,14 @@
 module TestService
 
-using Revise
 using Aeron
 using Agent
+using Clocks
 using EnumX
 using Logging
+using StaticKV
+
+include("PropertyStore/PropertyStore.jl")
+using .PropertyStore
 
 include("rtcagent.jl")
 
@@ -43,11 +47,13 @@ end
 function run_agent()
     Aeron.Context() do context
         Aeron.Client(context) do client
-            # Initialize the agent
-            agent = RtcAgent(client)
+            clock = CachedEpochClock(EpochClock())
+            properties = Properties(clock)
+            
+            agent = RtcAgent(client, properties, clock)
 
             # Start the agent
-            runner = AgentRunner(BackoffIdleStrategy(), agent)
+            runner = AgentRunner(BusySpinIdleStrategy(), agent)
             Agent.start_on_thread(runner)
 
             try

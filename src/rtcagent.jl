@@ -1,16 +1,9 @@
-using Aeron
-using Agent
-using Clocks
 using Hsm
 using LightSumTypes
 using SnowflakeId
 using SpidersFragmentFilters
 using SpidersMessageCodecs
-using StaticKV
 using UnsafeArrays
-
-include("PropertyStore/PropertyStore.jl")
-using .PropertyStore
 
 include("Timers/Timers.jl")
 using .Timers
@@ -59,7 +52,12 @@ struct CommunicationResources
     # buffer
     buf::Vector{UInt8}
 
-    function CommunicationResources(client::Aeron.Client, p::Properties, clientd)
+    function CommunicationResources(
+        client::Aeron.Client, 
+        p::Properties, 
+        control_fragment_handler::Aeron.FragmentAssembler,
+        input_fragment_handler::Aeron.FragmentAssembler
+    )
         status_uri = p[:StatusURI]
         status_stream_id = p[:StatusStreamID]
         status_stream = Aeron.add_publication(client, status_uri, status_stream_id)
@@ -68,16 +66,6 @@ struct CommunicationResources
         control_stream_id = p[:ControlStreamID]
         control_stream = Aeron.add_subscription(client, control_uri, control_stream_id)
 
-        fragment_handler = Aeron.FragmentHandler(control_handler, clientd)
-
-        if isset(p, :ControlFilter)
-            message_filter = SpidersTagFragmentFilter(fragment_handler, p[:ControlFilter])
-            control_fragment_handler = Aeron.FragmentAssembler(message_filter)
-        else
-            control_fragment_handler = Aeron.FragmentAssembler(fragment_handler)
-        end
-
-        input_fragment_handler = Aeron.FragmentAssembler(Aeron.FragmentHandler(data_handler, clientd))
         input_streams = Aeron.Subscription[]
 
         # Get the number of sub data connections from properties
@@ -150,10 +138,9 @@ Event management system that encapsulates event dispatch, communications, and st
     property_registry::Vector{PublicationConfig}
 end
 
-function RtcAgent(client::Aeron.Client, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
+function RtcAgent(client::Aeron.Client, properties::Properties, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
     fetch!(clock)
 
-    properties = Properties(clock)
     id_gen = SnowflakeIdGenerator(properties[:NodeId], clock)
     timers = PolledTimer(clock)
 
@@ -327,9 +314,6 @@ function property_poller(agent::RtcAgent)
 
     return published_count
 end
-
-include("utilities.jl")  # Import utility functions
-include("states/states.jl")  # Import state machine states
 
 """
     get_publication(agent::RtcAgent, stream_index::Int) -> Aeron.Publication
@@ -522,8 +506,7 @@ function Agent.on_close(agent::RtcAgent)
 end
 
 function Agent.on_error(agent::RtcAgent, error)
-    @error "Error in agent $(Agent.name(agent)): $error" exception = (error, catch_backtrace())
-    # exit(1)  # Exit on error
+    @error "Error in agent $(Agent.name(agent)):" exception = (error, catch_backtrace())
 end
 
 """
@@ -541,5 +524,6 @@ function Agent.do_work(agent::RtcAgent)
     return work_count
 end
 
-# Include comprehensive precompile statements for all hot paths
+include("utilities.jl")
+include("states/states.jl")
 include("precompile.jl")

@@ -6,7 +6,9 @@ function test_communications()
     @testset "Message Publishing" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 open(agent)
                 
                 # Test that basic agent setup works
@@ -26,7 +28,9 @@ function test_communications()
     @testset "Communication Setup" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 
                 # Test basic construction
                 @test !isnothing(agent)

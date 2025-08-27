@@ -8,12 +8,6 @@ Send an event response from the state machine.
 This is a common utility function used across different states to send responses.
 """
 @inline function send_event_response(agent::RtcAgent, event, value)
-    # Check if communications are initialized
-    if isnothing(agent.comms) || isnothing(agent.comms.status_stream)
-        @debug "Cannot send event response: communications not initialized" event value
-        return 0  # Return a dummy position
-    end
-    
     return publish_event(
         event,                    # field/event
         value,                    # value - dispatch handles scalar vs array
@@ -66,7 +60,5 @@ function handle_property_read(sm::RtcAgent, properties, event, _)
     if isset(properties, event)
         value = properties[event]
         send_event_response(sm, event, value)
-    else
-        throw(PropertyStore.PropertyNotFoundError(event))
     end
 end

@@ -4,7 +4,9 @@ function test_integration()
     @testset "Complete Agent Lifecycle" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 
                 # Test full lifecycle from creation to shutdown
                 # Note: RtcAgent doesn't have a public state field, test behavior instead
@@ -26,7 +28,9 @@ function test_integration()
     @testset "Property Publishing Workflow" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 open(agent)
                 
                 # Test that properties are accessible
@@ -43,7 +47,9 @@ function test_integration()
     @testset "Error Handling Workflows" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 
                 # Test state transition errors by trying to use agent before opening
                 @test_throws CommunicationNotInitializedError get_publication(agent, 1)
@@ -62,8 +68,12 @@ function test_integration()
         Aeron.Context() do context
             Aeron.Client(context) do client
                 # Test multiple agents can coexist
-                agent1 = RtcAgent(client)
-                agent2 = RtcAgent(client)
+                clock1 = CachedEpochClock(EpochClock())
+                properties1 = Properties(clock1)
+                agent1 = RtcAgent(client, properties1, clock1)
+                clock2 = CachedEpochClock(EpochClock())
+                properties2 = Properties(clock2)
+                agent2 = RtcAgent(client, properties2, clock2)
                 
                 open(agent1)
                 open(agent2)
@@ -82,7 +92,9 @@ function test_integration()
     @testset "Performance Validation" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 open(agent)
                 
                 # Measure allocation-free processing

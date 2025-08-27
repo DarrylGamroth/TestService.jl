@@ -7,7 +7,9 @@ function test_rtcagent()
         Aeron.Context() do context
             Aeron.Client(context) do client
                 # Test basic construction
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 @test agent isa RtcAgent
                 @test agent.client === client
                 @test agent.correlation_id == 0
@@ -20,9 +22,10 @@ function test_rtcagent()
                 @test isempty(agent.property_registry)
                 
                 # Test construction with specific clock
-                clock = CachedEpochClock(EpochClock())
-                agent2 = RtcAgent(client, clock)
-                @test agent2.clock === clock
+                clock2 = CachedEpochClock(EpochClock())
+                properties2 = Properties(clock2)
+                agent2 = RtcAgent(client, properties2, clock2)
+                @test agent2.clock === clock2
             end
         end
     end
@@ -30,7 +33,9 @@ function test_rtcagent()
     @testset "Communication Lifecycle" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 
                 # Test initial state
                 @test !isopen(agent)
@@ -60,7 +65,9 @@ function test_rtcagent()
     @testset "Agent Interface Implementation" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 
                 # Test Agent.name
                 name = Agent.name(agent)
@@ -92,7 +99,9 @@ function test_rtcagent()
     @testset "Event Dispatch" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 open(agent)
                 
                 # Test basic dispatch
@@ -109,7 +118,9 @@ function test_rtcagent()
     @testset "Property Registry Management" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 open(agent)
                 
                 # Test initial empty registry
@@ -134,7 +145,9 @@ function test_rtcagent()
     @testset "Error Handling" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 
                 # Test errors when communications not open
                 @test_throws CommunicationNotInitializedError get_publication(agent, 1)
@@ -156,7 +169,9 @@ function test_rtcagent()
     @testset "Work Loop Components" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 open(agent)
                 
                 # Test individual pollers

@@ -6,7 +6,9 @@ function test_property_publishing()
     @testset "Property Publication Workflow" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 open(agent)
                 
                 # Test that properties are accessible
@@ -23,7 +25,9 @@ function test_property_publishing()
     @testset "Periodic Publishing" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 open(agent)
                 
                 # Test basic agent functionality
@@ -37,7 +41,9 @@ function test_property_publishing()
     @testset "Multiple Strategy Integration" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 open(agent)
                 
                 # Test basic agent functionality
@@ -51,7 +57,9 @@ function test_property_publishing()
     @testset "Publication Config Management" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 
                 # Test basic agent functionality without streams
                 @test agent.property_registry isa Vector
@@ -66,7 +74,9 @@ function test_property_publishing()
     @testset "Strategy State Updates" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 open(agent)
                 
                 # Test basic agent functionality
@@ -92,7 +102,9 @@ function test_property_publishing()
     @testset "Zero Allocation Publishing" begin
         Aeron.Context() do context
             Aeron.Client(context) do client
-                agent = RtcAgent(client)
+                clock = CachedEpochClock(EpochClock())
+                properties = Properties(clock)
+                agent = RtcAgent(client, properties, clock)
                 open(agent)
                 
                 # Test basic agent functionality
