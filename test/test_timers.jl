@@ -2,7 +2,7 @@
 Test suite for Timer system functionality.
 Tests timer scheduling, cancellation, and polling.
 """
-function test_timers()
+function test_timers(client)
     @testset "Timer Basic Operations" begin
         clock = CachedEpochClock(EpochClock())
         timers = PolledTimer(clock)
@@ -24,20 +24,17 @@ function test_timers()
     end
     
     @testset "Timer Integration with Agent" begin
-        Aeron.Context() do context
-            Aeron.Client(context) do client
-                clock = CachedEpochClock(EpochClock())
-                properties = Properties(clock)
-                agent = RtcAgent(client, properties, clock)
-                
-                # Test that agent has timer system
-                @test !isnothing(agent.timers)
-                @test agent.timers isa PolledTimer
-                
-                # Test timer polling (should not error)
-                @test_nowarn timer_poller(agent)
-            end
-        end
+        clock = CachedEpochClock(EpochClock())
+        properties = Properties(clock)
+        comms = CommunicationResources(client, properties)
+        agent = RtcAgent(client, comms, properties, clock)
+        
+        # Test that agent has timer system
+        @test !isnothing(agent.timers)
+        @test agent.timers isa PolledTimer
+        
+        # Test timer polling (should not error)
+        @test_nowarn timer_poller(agent)
     end
     
     # Additional timer tests would go here

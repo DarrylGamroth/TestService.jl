@@ -1,0 +1,48 @@
+struct ControlStreamAdapter
+    subscription::Aeron.Subscription
+    assembler::Aeron.FragmentAssembler
+end
+
+"""
+    ControlStreamAdapter(subscription::Aeron.Subscription, properties, agent)
+
+Create a control stream adapter with the given subscription.
+"""
+function ControlStreamAdapter(subscription::Aeron.Subscription, properties, agent)
+    # Create the fragment handler that dispatches to control_handler
+    fragment_handler = Aeron.FragmentHandler(agent) do agent, buffer, _
+        # A single buffer may contain several Event messages. Decode each one at a time and dispatch
+        offset = 0
+        while offset < length(buffer)
+            message = EventMessageDecoder(buffer, offset; position_ptr=agent.position_ptr)
+            header = SpidersMessageCodecs.header(message)
+            agent.correlation_id = SpidersMessageCodecs.correlationId(header)
+            event = SpidersMessageCodecs.key(message, Symbol)
+
+            dispatch!(agent, event, message)
+
+            offset += sbe_encoded_length(MessageHeader) + sbe_decoded_length(message)
+        end
+        nothing
+    end
+
+    # Apply filtering if configured
+    if isset(properties, :ControlFilter)
+        message_filter = SpidersTagFragmentFilter(fragment_handler, properties[:ControlFilter])
+        assembler = Aeron.FragmentAssembler(message_filter)
+    else
+        assembler = Aeron.FragmentAssembler(fragment_handler)
+    end
+
+    ControlStreamAdapter(subscription, assembler)
+end
+
+"""
+    poll(adapter::ControlStreamAdapter, limit::Int = 10) -> Int
+
+Poll the control stream for incoming messages.
+Returns the number of fragments processed.
+"""
+function poll(adapter::ControlStreamAdapter, limit::Int=10)
+    return Aeron.poll(adapter.subscription, adapter.assembler, limit)
+end

@@ -23,5 +23,8 @@ export SUB_DATA_STREAM_1=10
 export PUB_DATA_URI_1="aeron:udp?endpoint=localhost:40123"
 export PUB_DATA_STREAM_1=12
 
+# export PUB_DATA_URI_2="aeron:udp?endpoint=localhost:40123"
+# export PUB_DATA_STREAM_2=13
+
 # Run the Julia script
 julia -e "using TestService" "$@"

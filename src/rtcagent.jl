@@ -11,6 +11,9 @@ using .Timers
 include("exceptions.jl")
 include("communications.jl")
 include("strategies.jl")
+include("communication_resources.jl")
+include("control_stream_adapter.jl")
+include("input_stream_adapter.jl")
 
 export RtcAgent, dispatch!,
     send_event_response,
@@ -36,98 +39,6 @@ mutable struct PublicationConfig
     next_scheduled_ns::Int64
 end
 
-struct CommunicationResources
-    # Aeron streams
-    status_stream::Aeron.Publication
-    control_stream::Aeron.Subscription
-    input_streams::Vector{Aeron.Subscription}
-
-    # Named output streams registry
-    output_streams::Dict{Symbol,Aeron.Publication}
-
-    # Fragment handlers
-    control_fragment_handler::Aeron.FragmentAssembler
-    input_fragment_handler::Aeron.FragmentAssembler
-
-    # buffer
-    buf::Vector{UInt8}
-
-    function CommunicationResources(client::Aeron.Client, p::Properties, clientd)
-        status_uri = p[:StatusURI]
-        status_stream_id = p[:StatusStreamID]
-        status_stream = Aeron.add_publication(client, status_uri, status_stream_id)
-
-        control_uri = p[:ControlURI]
-        control_stream_id = p[:ControlStreamID]
-        control_stream = Aeron.add_subscription(client, control_uri, control_stream_id)
-
-        fragment_handler = Aeron.FragmentHandler(control_handler, clientd)
-
-        if isset(p, :ControlFilter)
-            message_filter = SpidersTagFragmentFilter(fragment_handler, p[:ControlFilter])
-            control_fragment_handler = Aeron.FragmentAssembler(message_filter)
-        else
-            control_fragment_handler = Aeron.FragmentAssembler(fragment_handler)
-        end
-
-        input_fragment_handler = Aeron.FragmentAssembler(Aeron.FragmentHandler(data_handler, clientd))
-        input_streams = Aeron.Subscription[]
-
-        # Get the number of sub data connections from properties
-        sub_data_connection_count = p[:SubDataConnectionCount]
-
-        # Create subscriptions for each sub data URI/stream pair
-        for i in 1:sub_data_connection_count
-            uri_key = Symbol("SubDataURI$i")
-            stream_id_key = Symbol("SubDataStreamID$i")
-
-            if haskey(p, uri_key) && haskey(p, stream_id_key)
-                uri = p[uri_key]
-                stream_id = p[stream_id_key]
-                subscription = Aeron.add_subscription(client, uri, stream_id)
-                push!(input_streams, subscription)
-            end
-        end
-
-        # Initialize output streams registry and buffer
-        output_streams = Dict{Symbol,Aeron.Publication}()
-
-        # Set up PubData publications
-        if haskey(p, :PubDataConnectionCount)
-            pub_data_connection_count = p[:PubDataConnectionCount]
-
-            for i in 1:pub_data_connection_count
-                uri_key = Symbol("PubDataURI$i")
-                stream_id_key = Symbol("PubDataStreamID$i")
-
-                if haskey(p, uri_key) && haskey(p, stream_id_key)
-                    uri = p[uri_key]
-                    stream_id = p[stream_id_key]
-                    publication = Aeron.add_publication(client, uri, stream_id)
-                    output_streams[Symbol("PubData$i")] = publication
-                    @info "Created publication $i: $uri (stream ID: $stream_id)"
-                else
-                    @warn "Missing URI or stream ID for pub data connection $i"
-                end
-            end
-        else
-            @info "No PubDataConnectionCount found in properties, no publications created"
-        end
-
-        buf = Vector{UInt8}(undef, 1 << 23)  # Default buffer size
-
-        new(
-            status_stream,
-            control_stream,
-            input_streams,
-            output_streams,
-            control_fragment_handler,
-            input_fragment_handler,
-            buf
-        )
-    end
-end
-
 """
 Event management system that encapsulates event dispatch, communications, and state tracking.
 """
@@ -135,7 +46,9 @@ Event management system that encapsulates event dispatch, communications, and st
     client::Aeron.Client
     correlation_id::Int64
     position_ptr::Base.RefValue{Int64}
-    comms::Union{Nothing,CommunicationResources}
+    comms::CommunicationResources
+    control_adapter::Union{Nothing,ControlStreamAdapter}
+    input_adapters::Vector{InputStreamAdapter}
     clock::C
     properties::P
     id_gen::ID
@@ -143,7 +56,7 @@ Event management system that encapsulates event dispatch, communications, and st
     property_registry::Vector{PublicationConfig}
 end
 
-function RtcAgent(client::Aeron.Client, properties::Properties, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
+function RtcAgent(client::Aeron.Client, comms::CommunicationResources, properties::Properties, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
     fetch!(clock)
 
     id_gen = SnowflakeIdGenerator(properties[:NodeId], clock)
@@ -154,59 +67,15 @@ function RtcAgent(client::Aeron.Client, properties::Properties, clock::C=CachedE
         client,
         0,
         Ref{Int64}(0),
+        comms,
         nothing,
+        InputStreamAdapter[],
         clock,
         properties,
         id_gen,
         timers,
         PublicationConfig[]
     )
-end
-
-"""
-    Base.open(agent::RtcAgent)
-
-Set up communication resources for the event manager.
-Throws an error if communications are already active.
-"""
-function Base.open(agent::RtcAgent)
-    if isopen(agent)
-        throw(AgentStateError(:Open, "open communications"))
-    end
-
-    try
-        agent.comms = CommunicationResources(agent.client, agent.properties, agent)
-    catch e
-        throw(AgentCommunicationError("Failed to initialize communication resources: $(e)"))
-    end
-end
-
-"""
-    Base.isopen(agent::RtcAgent) -> Bool
-
-Check if communications are open for the agent.
-"""
-Base.isopen(agent::RtcAgent) = !isnothing(agent.comms)
-
-"""
-    Base.close(agent::RtcAgent)
-
-Tear down communication resources for the event manager.
-"""
-function Base.close(agent::RtcAgent)
-    if isopen(agent)
-        # Close streams
-        for stream in values(agent.comms.output_streams)
-            close(stream)
-        end
-        for stream in agent.comms.input_streams
-            close(stream)
-        end
-        close(agent.comms.control_stream)
-        close(agent.comms.status_stream)
-
-        agent.comms = nothing
-    end
 end
 
 """
@@ -235,68 +104,24 @@ function dispatch!(agent::RtcAgent, event::Symbol, message=nothing)
     end
 end
 
-# Message handling functions
-function control_handler(agent::RtcAgent, buffer, _)
-    # A single buffer may contain several Event messages. Decode each one at a time and dispatch
-    offset = 0
-    while offset < length(buffer)
-        message = EventMessageDecoder(buffer, offset; position_ptr=agent.position_ptr)
-        header = SpidersMessageCodecs.header(message)
-        agent.correlation_id = SpidersMessageCodecs.correlationId(header)
-        event = SpidersMessageCodecs.key(message, Symbol)
-
-        dispatch!(agent, event, message)
-
-        offset += sbe_encoded_length(MessageHeader) + sbe_decoded_length(message)
-    end
-    nothing
-end
-
-function data_handler(agent::RtcAgent, buffer, _)
-    message = TensorMessageDecoder(buffer; position_ptr=agent.position_ptr)
-    header = SpidersMessageCodecs.header(message)
-    agent.correlation_id = SpidersMessageCodecs.correlationId(header)
-    tag = SpidersMessageCodecs.tag(header, Symbol)
-
-    dispatch!(agent, tag, message)
-    nothing
-end
-
 """
     input_poller(agent::RtcAgent) -> Int
 
-Poll all input streams for incoming data messages.
+Poll all input streams for incoming data messages using input stream adapters.
 Returns the number of fragments processed.
 """
 function input_poller(agent::RtcAgent)
-    work_count = 0
-
-    while true
-        all_streams_empty = true
-        input_fragment_handler = agent.comms.input_fragment_handler
-
-        for subscription in agent.comms.input_streams
-            fragments_read = Aeron.poll(subscription, input_fragment_handler, DEFAULT_FRAGMENT_COUNT_LIMIT)
-            if fragments_read > 0
-                all_streams_empty = false
-            end
-            work_count += fragments_read
-        end
-        if all_streams_empty
-            break
-        end
-    end
-    return work_count
+    poll(agent.input_adapters, DEFAULT_FRAGMENT_COUNT_LIMIT)
 end
 
 """
     control_poller(agent::RtcAgent) -> Int
 
-Poll the control stream for incoming control messages.
+Poll the control stream for incoming control messages using the control stream adapter.
 Returns the number of fragments processed.
 """
 function control_poller(agent::RtcAgent)
-    return Aeron.poll(agent.comms.control_stream, agent.comms.control_fragment_handler, DEFAULT_FRAGMENT_COUNT_LIMIT)
+    poll(agent.control_adapter, DEFAULT_FRAGMENT_COUNT_LIMIT)
 end
 
 function timer_poller(agent::RtcAgent)
@@ -326,18 +151,13 @@ end
 Get a publication stream by index (1-based).
 """
 function get_publication(agent::RtcAgent, stream_index::Int)
-    if !isopen(agent)
-        throw(CommunicationNotInitializedError("get publication stream"))
-    end
-
     output_streams = agent.comms.output_streams
-    pub_key = Symbol("PubData$stream_index")
 
-    if !haskey(output_streams, pub_key)
+    if stream_index < 1 || stream_index > length(output_streams)
         throw(StreamNotFoundError("PubData$stream_index", stream_index))
     end
 
-    return output_streams[pub_key]
+    return output_streams[stream_index]
 end
 
 """
@@ -489,10 +309,23 @@ Initialize the agent by setting up communications and starting the state machine
 function Agent.on_start(agent::RtcAgent)
     @info "Starting agent $(Agent.name(agent))"
 
-    # Setup communications
-    open(agent)
+    try
+        # Create control stream adapter
+        agent.control_adapter = ControlStreamAdapter(
+            agent.comms.control_stream,
+            agent.properties,
+            agent
+        )
 
-    return nothing
+        # Create input stream adapters
+        empty!(agent.input_adapters)
+        for input_stream in agent.comms.input_streams
+            push!(agent.input_adapters, InputStreamAdapter(input_stream, agent))
+        end
+
+    catch e
+        throw(AgentCommunicationError("Failed to initialize communication resources: $(e)"))
+    end
 end
 
 """
@@ -504,10 +337,12 @@ function Agent.on_close(agent::RtcAgent)
     # Cancel all timers
     cancel!(agent.timers)
 
-    # Teardown communications
-    close(agent)
-
-    return nothing
+    # Close communication resources
+    close(agent.comms)
+    
+    # Clear adapters
+    agent.control_adapter = nothing
+    empty!(agent.input_adapters)
 end
 
 function Agent.on_error(agent::RtcAgent, error)

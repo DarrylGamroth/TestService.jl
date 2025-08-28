@@ -6,6 +6,8 @@ using Clocks
 using EnumX
 using Logging
 using StaticKV
+using SpidersMessageCodecs
+using SpidersFragmentFilters
 
 include("PropertyStore/PropertyStore.jl")
 using .PropertyStore
@@ -17,8 +19,8 @@ export main, RtcAgent,
     OnUpdateStrategy, PeriodicStrategy, ScheduledStrategy, RateLimitedStrategy,
     should_publish, next_time, property_poller, timer_poller,
     register!, unregister!, isregistered, list, get_publication,
-    # Communication and Property types
-    CommunicationResources, Properties,
+    # Communication and Adapter types
+    CommunicationResources, ControlStreamAdapter, InputStreamAdapter, Properties, poll,
     # Timer functions  
     schedule!, schedule_at!, cancel!,
     # Exception types  
@@ -50,7 +52,11 @@ function run_agent()
             clock = CachedEpochClock(EpochClock())
             properties = Properties(clock)
             
-            agent = RtcAgent(client, properties, clock)
+            # Create communication resources
+            comms = CommunicationResources(client, properties)
+            
+            # Inject communication resources into the agent
+            agent = RtcAgent(client, comms, properties, clock)
 
             # Start the agent
             runner = AgentRunner(BusySpinIdleStrategy(), agent)

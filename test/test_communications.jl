@@ -2,44 +2,48 @@
 Test suite for communication layer functionality.
 Tests basic communication setup without requiring actual Aeron streams.
 """
-function test_communications()
+function test_communications(client)
     @testset "Message Publishing" begin
-        Aeron.Context() do context
-            Aeron.Client(context) do client
-                clock = CachedEpochClock(EpochClock())
-                properties = Properties(clock)
-                agent = RtcAgent(client, properties, clock)
-                open(agent)
-                
-                # Test that basic agent setup works
-                @test !isnothing(agent.properties)
-                @test agent.properties[:Name] isa String
-                
-                # Test that we can access agent properties
-                @test haskey(agent.properties, :Name)
-                @test haskey(agent.properties, :NodeId) 
-                @test haskey(agent.properties, :HeartbeatPeriodNs)
-                
-                close(agent)
-            end
-        end
+        clock = CachedEpochClock(EpochClock())
+        properties = Properties(clock)
+        comms = CommunicationResources(client, properties)
+        agent = RtcAgent(client, comms, properties, clock)
+        Agent.on_start(agent)  # Initialize adapters
+        
+        # Test that basic agent setup works
+        @test !isnothing(agent.properties)
+        @test agent.properties[:Name] isa String
+        
+        # Test that we can access agent properties
+        @test haskey(agent.properties, :Name)
+        @test haskey(agent.properties, :NodeId) 
+        @test haskey(agent.properties, :HeartbeatPeriodNs)
+        
+        Agent.on_close(agent)
     end
     
     @testset "Communication Setup" begin
-        Aeron.Context() do context
-            Aeron.Client(context) do client
-                clock = CachedEpochClock(EpochClock())
-                properties = Properties(clock)
-                agent = RtcAgent(client, properties, clock)
-                
-                # Test basic construction
-                @test !isnothing(agent)
-                @test !isnothing(agent.properties)
-                
-                # Test agent lifecycle
-                @test_nowarn open(agent)
-                @test_nowarn close(agent)
-            end
-        end
+        clock = CachedEpochClock(EpochClock())
+        properties = Properties(clock)
+
+        # Test communication resources creation
+        comms = CommunicationResources(client, properties)
+        @test !isnothing(comms)
+        @test comms isa CommunicationResources
+        @test !isnothing(comms.status_stream)
+        @test !isnothing(comms.control_stream)
+        @test comms.input_streams isa Vector
+        @test comms.output_streams isa Vector
+        @test !isnothing(comms.buf)
+        
+        # Test agent construction with dependency injection
+        agent = RtcAgent(client, comms, properties, clock)
+        @test !isnothing(agent)
+        @test !isnothing(agent.properties)
+        @test agent.comms === comms
+        
+        # Test agent lifecycle
+        @test_nowarn Agent.on_start(agent)
+        @test_nowarn Agent.on_close(agent)
     end
 end

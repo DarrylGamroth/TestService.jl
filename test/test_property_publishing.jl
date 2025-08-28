@@ -2,89 +2,74 @@
 Test suite for property publishing system.
 Tests the integration of strategies with actual property publishing.
 """
-function test_property_publishing()
+function test_property_publishing(client)
     @testset "Property Publication Workflow" begin
-        Aeron.Context() do context
-            Aeron.Client(context) do client
-                clock = CachedEpochClock(EpochClock())
-                properties = Properties(clock)
-                agent = RtcAgent(client, properties, clock)
-                open(agent)
-                
-                # Test that properties are accessible
-                @test agent.properties !== nothing
-                
-                # Test that registry is accessible
-                @test agent.property_registry isa Vector
-                
-                close(agent)
-            end
-        end
+        clock = CachedEpochClock(EpochClock())
+        properties = Properties(clock)
+        comms = CommunicationResources(client, properties)
+        agent = RtcAgent(client, comms, properties, clock)
+        Agent.on_start(agent)
+        
+        # Test that properties are accessible
+        @test agent.properties !== nothing
+        
+        # Test that registry is accessible
+        @test agent.property_registry isa Vector
+        
+        Agent.on_close(agent)
     end
     
     @testset "Periodic Publishing" begin
-        Aeron.Context() do context
-            Aeron.Client(context) do client
-                clock = CachedEpochClock(EpochClock())
-                properties = Properties(clock)
-                agent = RtcAgent(client, properties, clock)
-                open(agent)
-                
-                # Test basic agent functionality
-                @test agent.properties !== nothing
-                
-                close(agent)
-            end
-        end
+        clock = CachedEpochClock(EpochClock())
+        properties = Properties(clock)
+        comms = CommunicationResources(client, properties)
+        agent = RtcAgent(client, comms, properties, clock)
+        Agent.on_start(agent)
+        
+        # Test basic agent functionality
+        @test agent.properties !== nothing
+        
+        Agent.on_close(agent)
     end
     
     @testset "Multiple Strategy Integration" begin
-        Aeron.Context() do context
-            Aeron.Client(context) do client
-                clock = CachedEpochClock(EpochClock())
-                properties = Properties(clock)
-                agent = RtcAgent(client, properties, clock)
-                open(agent)
-                
-                # Test basic agent functionality
-                @test agent.properties !== nothing
-                
-                close(agent)
-            end
-        end
+        clock = CachedEpochClock(EpochClock())
+        properties = Properties(clock)
+        comms = CommunicationResources(client, properties)
+        agent = RtcAgent(client, comms, properties, clock)
+        Agent.on_start(agent)
+        
+        # Test basic agent functionality
+        @test agent.properties !== nothing
+        
+        Agent.on_close(agent)
     end
     
     @testset "Publication Config Management" begin
-        Aeron.Context() do context
-            Aeron.Client(context) do client
-                clock = CachedEpochClock(EpochClock())
-                properties = Properties(clock)
-                agent = RtcAgent(client, properties, clock)
-                
-                # Test basic agent functionality without streams
-                @test agent.property_registry isa Vector
-                @test isempty(agent.property_registry)  # No registrations yet
-                
-                open(agent)
-                close(agent)
-            end
-        end
+        clock = CachedEpochClock(EpochClock())
+        properties = Properties(clock)
+        comms = CommunicationResources(client, properties)
+        agent = RtcAgent(client, comms, properties, clock)
+        
+        # Test basic agent functionality without streams
+        @test agent.property_registry isa Vector
+        @test isempty(agent.property_registry)  # No registrations yet
+        
+        Agent.on_start(agent)
+        Agent.on_close(agent)
     end
     
     @testset "Strategy State Updates" begin
-        Aeron.Context() do context
-            Aeron.Client(context) do client
-                clock = CachedEpochClock(EpochClock())
-                properties = Properties(clock)
-                agent = RtcAgent(client, properties, clock)
-                open(agent)
-                
-                # Test basic agent functionality
-                @test agent.properties !== nothing
-                
-                close(agent)
-            end
-        end
+        clock = CachedEpochClock(EpochClock())
+        properties = Properties(clock)
+        comms = CommunicationResources(client, properties)
+        agent = RtcAgent(client, comms, properties, clock)
+        Agent.on_start(agent)
+        
+        # Test basic agent functionality
+        @test agent.properties !== nothing
+        
+        Agent.on_close(agent)
     end
     
     @testset "Property Access in Publishing" begin
@@ -100,18 +85,15 @@ function test_property_publishing()
     end
     
     @testset "Zero Allocation Publishing" begin
-        Aeron.Context() do context
-            Aeron.Client(context) do client
-                clock = CachedEpochClock(EpochClock())
-                properties = Properties(clock)
-                agent = RtcAgent(client, properties, clock)
-                open(agent)
-                
-                # Test basic agent functionality
-                @test agent.properties !== nothing
-                
-                close(agent)
-            end
-        end
+        clock = CachedEpochClock(EpochClock())
+        properties = Properties(clock)
+        comms = CommunicationResources(client, properties)
+        agent = RtcAgent(client, comms, properties, clock)
+        Agent.on_start(agent)
+        
+        # Test basic agent functionality
+        @test agent.properties !== nothing
+        
+        Agent.on_close(agent)
     end
 end

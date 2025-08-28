@@ -1,22 +1,19 @@
 # Test suite for utility functions.
 # Tests event response handling, property encoding/decoding, and property handlers.
 
-function test_utilities()
+function test_utilities(client)
     @testset "Property Value Handling" begin
-        Aeron.Context() do context
-            Aeron.Client(context) do client
-                clock = CachedEpochClock(EpochClock())
-                properties = Properties(clock)
-                agent = RtcAgent(client, properties, clock)
-                open(agent)
-                
-                # Test that properties exist and are accessible
-                @test agent.properties !== nothing
-                @test isa(agent.properties, Any)  # Properties exist but structure may vary
-                
-                close(agent)
-            end
-        end
+        clock = CachedEpochClock(EpochClock())
+        properties = Properties(clock)
+        comms = CommunicationResources(client, properties)
+        agent = RtcAgent(client, comms, properties, clock)
+        Agent.on_start(agent)
+        
+        # Test that properties exist and are accessible
+        @test agent.properties !== nothing
+        @test isa(agent.properties, Any)  # Properties exist but structure may vary
+        
+        Agent.on_close(agent)
     end
     
     # Additional utility tests would go here in a real implementation

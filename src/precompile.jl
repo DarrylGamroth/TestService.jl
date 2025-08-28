@@ -15,9 +15,9 @@ function _precompile_testservice()
     # Core Type Construction
     # =============================================================================
     
-    # RtcAgent construction
-    precompile(Tuple{typeof(RtcAgent),Aeron.Client,PropertiesType,ClockType})
-    precompile(Tuple{typeof(RtcAgent),Aeron.Client,PropertiesType})
+    # RtcAgent construction - updated for dependency injection
+    precompile(Tuple{typeof(RtcAgent),Aeron.Client,CommunicationResources,PropertiesType,ClockType})
+    precompile(Tuple{typeof(RtcAgent),Aeron.Client,CommunicationResources,PropertiesType})
     
     # Properties construction and access
     precompile(Tuple{typeof(Properties),ClockType})
@@ -159,22 +159,30 @@ function _precompile_testservice()
     precompile(Tuple{typeof(Agent.do_work),AgentType})
 
     # =============================================================================
-    # Communication Setup/Teardown
+    # Adapter Construction and Operations
     # =============================================================================
     
-    # Communication lifecycle
-    precompile(Tuple{typeof(Base.open),AgentType})
-    precompile(Tuple{typeof(Base.close),AgentType})
-    precompile(Tuple{typeof(Base.isopen),AgentType})
-    precompile(Tuple{typeof(CommunicationResources),Aeron.Client,PropertiesType,AgentType})
+    # Adapter creation
+    precompile(Tuple{typeof(ControlStreamAdapter),Aeron.Subscription,PropertiesType,AgentType})
+    precompile(Tuple{typeof(InputStreamAdapter),Aeron.Subscription,AgentType})
+    
+    # Adapter polling operations
+    precompile(Tuple{typeof(poll),ControlStreamAdapter,Int})
+    precompile(Tuple{typeof(poll),InputStreamAdapter,Int})
+    precompile(Tuple{typeof(poll),Vector{InputStreamAdapter},Int})
+
+    # =============================================================================
+    # Communication Setup/Teardown - Updated for new architecture
+    # =============================================================================
+    
+    # CommunicationResources operations
+    precompile(Tuple{typeof(CommunicationResources),Aeron.Client,PropertiesType})
+    precompile(Tuple{typeof(Base.close),CommunicationResources})
+    precompile(Tuple{typeof(Base.isopen),CommunicationResources})
 
     # =============================================================================
     # Message Handlers and Pollers
     # =============================================================================
-    
-    # Fragment handlers
-    precompile(Tuple{typeof(control_handler),AgentType,Vector{UInt8},Nothing})
-    precompile(Tuple{typeof(data_handler),AgentType,Vector{UInt8},Nothing})
     
     # Polling functions
     precompile(Tuple{typeof(input_poller),AgentType})

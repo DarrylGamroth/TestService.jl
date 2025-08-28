@@ -46,8 +46,8 @@ function test_rtcagent(client)
         Agent.on_start(agent)
         @test !isnothing(agent.control_adapter)
         @test agent.control_adapter isa ControlStreamAdapter
-        # NOTE: input_adapters might be empty if no input streams are configured
-        @test agent.input_adapters isa Vector{InputStreamAdapter}
+        @test !isempty(agent.input_adapters)
+        @test all(adapter -> adapter isa InputStreamAdapter, agent.input_adapters)
         
         # Test that Agent.on_close clears adapters and closes resources
         Agent.on_close(agent)
@@ -70,7 +70,7 @@ function test_rtcagent(client)
         result = Agent.on_start(agent)
         @test result === nothing
         @test !isnothing(agent.control_adapter)
-        @test agent.input_adapters isa Vector{InputStreamAdapter}
+        @test !isempty(agent.input_adapters)
         
         # Test Agent.do_work
         work_count = Agent.do_work(agent)
@@ -78,20 +78,24 @@ function test_rtcagent(client)
         @test work_count >= 0
         
         # Test Agent.on_close - cleans up adapters
-        Agent.on_close(agent)
+        result = Agent.on_close(agent)
+        @test result === nothing
         @test agent.control_adapter === nothing
         @test isempty(agent.input_adapters)
     end
     
-    @testset "Dispatch System" begin
+    @testset "Event Dispatch" begin
         clock = CachedEpochClock(EpochClock())
         properties = Properties(clock)
         comms = CommunicationResources(client, properties)
         agent = RtcAgent(client, comms, properties, clock)
         
-        # Test dispatch! function exists and handles events
-        @test_nowarn dispatch!(agent, :TestEvent)
-        @test_nowarn dispatch!(agent, :AnotherEvent, "test message")
+        # Test dispatching unknown event
+        unknown_event = :UnknownEvent
+        @test TestService.dispatch_event(agent, unknown_event) == false
+        
+        # Test dispatching known event would return true if implemented
+        @test TestService.dispatch_event(agent, :StopEvent) == false  # Not implemented yet
     end
     
     @testset "Property Registry Management" begin
@@ -100,13 +104,21 @@ function test_rtcagent(client)
         comms = CommunicationResources(client, properties)
         agent = RtcAgent(client, comms, properties, clock)
         
-        # Test property registry operations
-        @test isempty(agent.property_registry)
-        @test !isregistered(agent, :TestProperty)
+        # Test adding property to registry
+        register_property!(agent, :TestProperty, OnUpdate())
+        @test haskey(agent.property_registry, :TestProperty)
+        @test agent.property_registry[:TestProperty] isa PropertyRegistration
         
-        # Test that we can access registry functions
-        @test list(agent) == []
-        @test empty!(agent) == 0  # No registrations to clear
+        # Test that registered property has correct strategy
+        reg = agent.property_registry[:TestProperty]
+        @test reg.strategy isa PublishStrategy
+        
+        # Test removing property from registry
+        unregister_property!(agent, :TestProperty)
+        @test !haskey(agent.property_registry, :TestProperty)
+        
+        # Test unregistering non-existent property doesn't error
+        @test_nowarn unregister_property!(agent, :NonExistentProperty)
     end
     
     @testset "Error Handling" begin
@@ -138,14 +150,16 @@ function test_rtcagent(client)
         # Test individual work components
         @test control_poller(agent) isa Int
         @test input_poller(agent) isa Int
-        @test timer_poller(agent) isa Int
-        @test property_poller(agent) isa Int
+        @test timer_work(agent) isa Int
+        @test status_heartbeat(agent) isa Int
+        @test property_publisher(agent) isa Int
         
         # All should return 0 in test environment (no actual work)
         @test control_poller(agent) == 0
         @test input_poller(agent) == 0
-        @test timer_poller(agent) >= 0  # May have timer work
-        @test property_poller(agent) >= 0  # May publish properties
+        @test timer_work(agent) >= 0  # May have timer work
+        @test status_heartbeat(agent) >= 0  # May publish heartbeat
+        @test property_publisher(agent) >= 0  # May publish properties
         
         Agent.on_close(agent)
     end
