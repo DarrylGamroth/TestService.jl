@@ -46,44 +46,47 @@ include("test_integration.jl")
     @testset "Strategy System Tests" begin
         test_strategies()
     end
-    
+
     @testset "PropertyStore Tests" begin
         test_property_store()
     end
-    
+
     # Tests that need shared Aeron context
-    Aeron.Context() do context
-        Aeron.Client(context) do client
-            @testset "RtcAgent Core Tests" begin
-                test_rtcagent(client)
-            end
-            
-            @testset "Stream Adapter Tests" begin
-                test_adapters(client)
-            end
-            
-            @testset "Property Publishing Tests" begin
-                test_property_publishing(client)
-            end
-            
-            @testset "Communications Tests" begin
-                test_communications(client)
-            end
-            
-            @testset "Timer System Tests" begin
-                test_timers(client)
-            end
-            
-            @testset "Utilities Tests" begin
-                test_utilities(client)
-            end
-            
-            @testset "Exception Handling Tests" begin
-                test_exceptions(client)
-            end
-            
-            @testset "Integration Tests" begin
-                test_integration(client)
+    MediaDriver.launch_embedded() do driver
+        Aeron.Context() do context
+            Aeron.aeron_dir!(context, MediaDriver.aeron_dir(driver))
+            Aeron.Client(context) do client
+                @testset "RtcAgent Core Tests" begin
+                    test_rtcagent(client)
+                end
+
+                @testset "Stream Adapter Tests" begin
+                    test_adapters(client)
+                end
+
+                @testset "Property Publishing Tests" begin
+                    test_property_publishing(client)
+                end
+
+                @testset "Communications Tests" begin
+                    test_communications(client)
+                end
+
+                @testset "Timer System Tests" begin
+                    test_timers(client)
+                end
+
+                @testset "Utilities Tests" begin
+                    test_utilities(client)
+                end
+
+                @testset "Exception Handling Tests" begin
+                    test_exceptions(client)
+                end
+
+                @testset "Integration Tests" begin
+                    test_integration(client)
+                end
             end
         end
     end
