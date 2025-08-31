@@ -16,7 +16,7 @@ function ControlStreamAdapter(subscription::Aeron.Subscription, properties, agen
         while offset < length(buffer)
             message = EventMessageDecoder(buffer, offset; position_ptr=agent.position_ptr)
             header = SpidersMessageCodecs.header(message)
-            agent.correlation_id = SpidersMessageCodecs.correlationId(header)
+            agent.source_correlation_id = SpidersMessageCodecs.correlationId(header)
             event = SpidersMessageCodecs.key(message, Symbol)
 
             dispatch!(agent, event, message)

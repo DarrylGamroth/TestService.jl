@@ -1,25 +1,6 @@
 # State machine utility functions
 # Common helper functions used across different states
 
-"""
-    send_event_response(agent::RtcAgent, event, value)
-
-Send an event response from the state machine.
-This is a common utility function used across different states to send responses.
-"""
-@inline function send_event_response(agent::RtcAgent, event, value)
-    return publish_event(
-        event,                    # field/event
-        value,                    # value - dispatch handles scalar vs array
-        agent.properties[:Name],     # agent_name
-        agent.correlation_id,        # correlation_id
-        time_nanos(agent.clock),     # timestamp_ns
-        agent.comms.status_stream,   # publication
-        agent.comms.buf,             # buffer
-        agent.position_ptr           # position_ptr
-    )
-end
-
 function decode_property_value(message, ::Type{T}) where {T<:AbstractArray}
     tensor_message = SpidersMessageCodecs.value(message, SpidersMessageCodecs.TensorMessage)
     SpidersMessageCodecs.decode(tensor_message, T)
@@ -53,12 +34,12 @@ function handle_property_write(sm::RtcAgent, properties, event, message)
     value = decode_property_value(message, prop_type)
     
     set_property_value!(properties, event, value, prop_type)
-    send_event_response(sm, event, value)
+    publish_status_event(sm, event, value, sm.source_correlation_id)
 end
 
 function handle_property_read(sm::RtcAgent, properties, event, _)
     if isset(properties, event)
         value = properties[event]
-        send_event_response(sm, event, value)
+        publish_status_event(sm, event, value, sm.source_correlation_id)
     end
 end

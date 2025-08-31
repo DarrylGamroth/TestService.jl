@@ -11,7 +11,7 @@ function test_rtcagent(client)
         agent = RtcAgent(client, comms, properties, clock)
         @test agent isa RtcAgent
         @test agent.client === client
-        @test agent.correlation_id == 0
+        @test agent.source_correlation_id == 0
         @test agent.position_ptr[] == 0
         @test agent.comms === comms
         @test !isnothing(agent.clock)

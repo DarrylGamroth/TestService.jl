@@ -15,8 +15,8 @@ function InputStreamAdapter(subscription::Aeron.Subscription, agent)
     fragment_handler = Aeron.FragmentHandler(agent) do agent, buffer, _
         message = TensorMessageDecoder(buffer; position_ptr=agent.position_ptr)
         header = SpidersMessageCodecs.header(message)
-        agent.correlation_id = SpidersMessageCodecs.correlationId(header)
-        tag = SpidersMessageCodecs.tag(header, Symbol)
+        agent.source_correlation_id = SpidersMessageCodecs.correlationId(header)
+        tag = Symbol(SpidersMessageCodecs.tag(header, String))
 
         dispatch!(agent, tag, message)
         nothing

@@ -16,9 +16,10 @@ include("control_stream_adapter.jl")
 include("input_stream_adapter.jl")
 
 export RtcAgent, dispatch!,
-    send_event_response,
     input_poller, control_poller, property_poller, timer_poller,
     PublishStrategy, OnUpdate, Periodic, Scheduled, RateLimited,
+    publish_status_event, publish_state_change,
+    publish_property, publish_property_update,
     register!, unregister!, isregistered, list, get_publication,
     PolledTimer,
     should_publish, next_time,
@@ -44,7 +45,7 @@ Event management system that encapsulates event dispatch, communications, and st
 """
 @hsmdef mutable struct RtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeIdGenerator,ET<:PolledTimer}
     client::Aeron.Client
-    correlation_id::Int64
+    source_correlation_id::Int64
     position_ptr::Base.RefValue{Int64}
     comms::CommunicationResources
     control_adapter::Union{Nothing,ControlStreamAdapter}
@@ -55,6 +56,10 @@ Event management system that encapsulates event dispatch, communications, and st
     timers::ET
     property_registry::Vector{PublicationConfig}
 end
+
+# Include proxy modules after RtcAgent is defined
+include("status_proxy.jl")
+include("property_proxy.jl")
 
 function RtcAgent(client::Aeron.Client, comms::CommunicationResources, properties::Properties, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
     fetch!(clock)
@@ -90,7 +95,7 @@ function dispatch!(agent::RtcAgent, event::Symbol, message=nothing)
         current = Hsm.current(agent)
 
         if prev != current
-            send_event_response(agent, :StateChange, current)
+            publish_state_change(agent, current, agent.source_correlation_id)
         end
 
     catch e
@@ -126,6 +131,7 @@ end
 
 function timer_poller(agent::RtcAgent)
     Timers.poll(agent.timers, agent) do event, now, agent
+        agent.source_correlation_id = next_id(agent.id_gen)
         dispatch!(agent, event, now)
     end
 end
@@ -139,7 +145,7 @@ function property_poller(agent::RtcAgent)
 
     # Process each registered publication
     for config in agent.property_registry
-        published_count += publish_property!(agent, config)
+        published_count += publish_property_update(agent, config)
     end
 
     return published_count
@@ -258,41 +264,7 @@ function Base.empty!(agent::RtcAgent)
     return count
 end
 
-"""
-    publish_property!(agent::RtcAgent, config::PublicationConfig)
 
-Process a single property publication based on its strategy and timing.
-Returns 1 if processed (regardless of whether published), 0 if skipped.
-"""
-@inline function publish_property!(agent::RtcAgent, config::PublicationConfig)
-    # Get current time for this publication cycle
-    now = time_nanos(agent.clock)
-
-    # Early exit if strategy says not to publish based on timing
-    property_timestamp_ns = last_update(agent.properties, config.field)
-    if !should_publish(config.strategy,
-        config.last_published_ns,
-        config.next_scheduled_ns,
-        property_timestamp_ns,
-        now)
-        return 0
-    end
-
-    publish_value(
-        config.field,
-        agent.properties[config.field],
-        agent.properties[:Name],
-        next_id(agent.id_gen),
-        now,
-        config.stream,
-        agent.comms.buf,
-        agent.position_ptr
-    )
-    config.last_published_ns = now
-    config.next_scheduled_ns = next_time(config.strategy, now)
-
-    return 1
-end
 
 # =============================================================================
 # Agent Interface Implementation

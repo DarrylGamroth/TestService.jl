@@ -41,7 +41,7 @@ function _precompile_testservice()
     # =============================================================================
     
     # Property publication - critical hot path
-    precompile(Tuple{typeof(publish_property!),AgentType,PublicationConfig})
+    precompile(Tuple{typeof(publish_property_update),AgentType,PublicationConfig})
     precompile(Tuple{typeof(property_poller),AgentType})
     
     # Strategy functions - called in every publication evaluation
@@ -79,13 +79,6 @@ function _precompile_testservice()
     precompile(Tuple{typeof(publish_event),Symbol,Symbol,String,Int64,Int64,Aeron.Publication,Vector{UInt8},Base.RefValue{Int64}})
     precompile(Tuple{typeof(publish_event),Symbol,Bool,String,Int64,Int64,Aeron.Publication,Vector{UInt8},Base.RefValue{Int64}})
     precompile(Tuple{typeof(publish_event),Symbol,Float64,String,Int64,Int64,Aeron.Publication,Vector{UInt8},Base.RefValue{Int64}})
-
-    # Utility functions for event responses
-    precompile(Tuple{typeof(send_event_response),AgentType,Symbol,String})
-    precompile(Tuple{typeof(send_event_response),AgentType,Symbol,Int64})
-    precompile(Tuple{typeof(send_event_response),AgentType,Symbol,Float64})
-    precompile(Tuple{typeof(send_event_response),AgentType,Symbol,Bool})
-    precompile(Tuple{typeof(send_event_response),AgentType,Symbol,Symbol})
 
     # =============================================================================
     # Aeron Communication Primitives

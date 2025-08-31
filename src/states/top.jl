@@ -20,10 +20,7 @@ end
 end
 
 @on_event function (sm::RtcAgent, ::Top, event::Heartbeat, now::Int64)
-    sm.correlation_id = next_id(sm.id_gen)
-
-    # Send current state as the Heartbeat message
-    send_event_response(sm, event, Hsm.current(sm))
+    publish_status_event(sm, event, Hsm.current(sm), sm.source_correlation_id)
 
     # Reschedule the next heartbeat
     next_heartbeat_time = now + sm.properties[:HeartbeatPeriodNs]
@@ -33,7 +30,8 @@ end
 end
 
 @on_event function (sm::RtcAgent, ::Top, event::Error, error::Exception)
-    send_event_response(sm, event, "$error")
+    sm.source_correlation_id = next_id(sm.id_gen)
+    publish_status_event(sm, event, "$error", sm.source_correlation_id)
     return Hsm.EventHandled
 
     # Transition to Error state
@@ -45,7 +43,7 @@ end
 end
 
 @on_event function (sm::RtcAgent, ::Top, ::State, _)
-    send_event_response(sm, :State, Hsm.current(sm))
+    publish_status_event(sm, :State, Hsm.current(sm), sm.source_correlation_id)
     return Hsm.EventHandled
 end
 
