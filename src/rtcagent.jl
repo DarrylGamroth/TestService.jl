@@ -205,7 +205,7 @@ function dispatch!(agent::RtcAgent, event::Symbol, message=nothing)
         current = Hsm.current(agent)
 
         if prev != current
-            publish_state_change(agent, current, agent.source_correlation_id)
+            publish_state_change(agent, current)
         end
 
     catch e
@@ -246,8 +246,17 @@ function timer_poller(agent::RtcAgent)
     end
 end
 
+"""
+    should_poll_properties(agent::RtcAgent) -> Bool
+
+Determine whether property polling should be active based on agent state.
+"""
+@inline function should_poll_properties(agent::RtcAgent)
+    return Hsm.current(agent) === :Playing
+end
+
 function property_poller(agent::RtcAgent)
-    if isempty(agent.property_registry)
+    if !should_poll_properties(agent) || isempty(agent.property_registry)
         return 0
     end
 

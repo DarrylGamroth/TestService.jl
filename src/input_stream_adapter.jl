@@ -1,6 +1,7 @@
 struct InputStreamAdapter
     subscription::Aeron.Subscription
     assembler::Aeron.FragmentAssembler
+    position_ptr::Base.RefValue{Int64}
 end
 
 """
@@ -8,22 +9,27 @@ end
 
 Create an input stream adapter with the given subscription.
 The adapter encapsulates the FragmentAssembler and message processing logic.
-Agent type is inferred by the JIT compiler.
 """
 function InputStreamAdapter(subscription::Aeron.Subscription, agent)
-    # Create the fragment handler that dispatches to data_handler
-    fragment_handler = Aeron.FragmentHandler(agent) do agent, buffer, _
-        message = TensorMessageDecoder(buffer; position_ptr=agent.position_ptr)
-        header = SpidersMessageCodecs.header(message)
-        agent.source_correlation_id = SpidersMessageCodecs.correlationId(header)
-        tag = Symbol(SpidersMessageCodecs.tag(header, String))
+    # Create position pointer for this adapter
+    position_ptr = Ref{Int64}(0)
 
-        dispatch!(agent, tag, message)
-        nothing
+    let position_ptr = position_ptr
+        # Create the fragment handler that dispatches to data_handler
+        fragment_handler = Aeron.FragmentHandler(agent) do agent, buffer, _
+            message = TensorMessageDecoder(buffer; position_ptr=position_ptr)
+            header = SpidersMessageCodecs.header(message)
+            agent.source_correlation_id = SpidersMessageCodecs.correlationId(header)
+            tag = SpidersMessageCodecs.tag(header, Symbol)
+
+            dispatch!(agent, tag, message)
+            nothing
+        end
+        assembler = Aeron.FragmentAssembler(fragment_handler)
+
+        InputStreamAdapter(subscription, assembler, position_ptr)
     end
-    assembler = Aeron.FragmentAssembler(fragment_handler)
 
-    InputStreamAdapter(subscription, assembler)
 end
 
 """
