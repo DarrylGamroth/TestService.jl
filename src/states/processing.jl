@@ -4,7 +4,14 @@
 @statedef RtcAgent :Processing :Ready
 
 @on_entry function (sm::RtcAgent, ::Processing)
-    GC.gc()  # Perform garbage collection on entering processing state
+    # Register properties for the agent's lifecycle
+    register!(sm, :TestMatrix, 1, Periodic(1_000_000_000))
+    GC.gc()
+end
+
+@on_exit function (sm::RtcAgent, ::Processing)
+    # Clean up all property registrations when leaving processing
+    unregister!(sm, :TestMatrix)
 end
 
 @on_initial function (sm::RtcAgent, ::Processing)

@@ -3,69 +3,55 @@ Property proxy for publishing property values to multiple output streams.
 Handles all outbound property communication following the Aeron proxy pattern.
 """
 
-# Note: status_proxy.jl is included by rtcagent.jl, so publish_value is available
-
 # =============================================================================
-# Property Proxy Functions
+# Proxy Struct Definition
 # =============================================================================
 
 """
-Publish a property value to a specific output stream.
+Property proxy struct for dedicated property stream publishing.
+Contains only the minimal components needed for Aeron message publishing.
 """
-function publish_property(agent::RtcAgent, stream_index::Int, field::Symbol, value)
-    # Validate stream index
-    if stream_index < 1 || stream_index > length(agent.comms.output_streams)
-        throw(BoundsError("Stream index $stream_index out of range (1:$(length(agent.comms.output_streams)))"))
+struct PropertyProxy
+    position_ptr::Base.RefValue{Int64}
+    buffer::Vector{UInt8}
+    publications::Vector{Aeron.Publication}
+end
+
+# =============================================================================
+# Property Proxy Functions (Direct Proxy Interface)
+# =============================================================================
+
+"""
+Publish a property value to a specific stream using the proxy struct interface.
+"""
+function publish_property(proxy::PropertyProxy, stream_index::Int, field::Symbol, value, tag::String, correlation_id::Int64, timestamp_ns::Int64)
+    if stream_index < 1 || stream_index > length(proxy.publications)
+        throw(StreamNotFoundError("PubData$stream_index", stream_index))
     end
     
-    # Validate field exists in properties
-    if !haskey(agent.properties, field)
-        throw(KeyError("Property $field not found in agent"))
-    end
-    
-    correlation_id = next_id(agent.id_gen)
-    timestamp = time_nanos(agent.clock)
-    publication = agent.comms.output_streams[stream_index]
-    
+    publication = proxy.publications[stream_index]
     return publish_value(
-        field, value, agent.properties[:Name], correlation_id, timestamp,
-        publication, agent.comms.buf, agent.position_ptr
+        field, value, tag, correlation_id, timestamp_ns,
+        publication, proxy.buffer, proxy.position_ptr
     )
 end
 
 """
-Publish a single property update with strategy evaluation.
-Consolidates the property publishing logic from rtcagent.jl.
+Publish a single property update with strategy evaluation using the proxy struct interface.
+This function contains the business logic for strategy evaluation and publication timing.
 """
-function publish_property_update(agent::RtcAgent, config::PublicationConfig)
-    now = time_nanos(agent.clock)
-    
-    property_timestamp_ns = last_update(agent.properties, config.field)
+function publish_property_update(proxy::PropertyProxy, config::PublicationConfig, properties, tag::String, id_gen, now::Int64)
+    property_timestamp_ns = last_update(properties, config.field)
     if !should_publish(config.strategy, config.last_published_ns, 
                       config.next_scheduled_ns, property_timestamp_ns, now)
         return 0
     end
     
-    # Use proxy function for clean separation of concerns
-    publish_property(agent, config.stream_index, 
-                    config.field, agent.properties[config.field])
+    # Use proxy directly with business logic parameters
+    publish_property(proxy, config.stream_index, config.field, properties[config.field],
+                    tag, next_id(id_gen), now)
     
     config.last_published_ns = now
     config.next_scheduled_ns = next_time(config.strategy, now)
     return 1
 end
-
-# =============================================================================
-# Future Extension Point: Custom Property Encoders
-# =============================================================================
-
-# When different SBE encoders are needed:
-# struct PropertyProxy{E<:AbstractEncoder}
-#     agent_name::String
-#     encoder::E
-#     correlation_id_generator::SnowflakeIdGenerator
-#     clock::AbstractClock
-#     buffer::Vector{UInt8}
-#     position_ptr::Ref{Int64}
-#     publications::Vector{Aeron.Publication}
-# end

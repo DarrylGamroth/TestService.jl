@@ -20,6 +20,7 @@ export RtcAgent, dispatch!,
     PublishStrategy, OnUpdate, Periodic, Scheduled, RateLimited,
     publish_status_event, publish_state_change,
     publish_property, publish_property_update,
+    StatusProxy, PropertyProxy,  # Export proxy struct types
     register!, unregister!, isregistered, list, get_publication,
     PolledTimer,
     should_publish, next_time,
@@ -43,13 +44,19 @@ end
 """
 Event management system that encapsulates event dispatch, communications, and state tracking.
 """
+
+# Include proxy modules before RtcAgent struct to make types available
+include("status_proxy.jl")
+include("property_proxy.jl")
+
 @hsmdef mutable struct RtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeIdGenerator,ET<:PolledTimer}
     client::Aeron.Client
     source_correlation_id::Int64
-    position_ptr::Base.RefValue{Int64}
     comms::CommunicationResources
     control_adapter::Union{Nothing,ControlStreamAdapter}
     input_adapters::Vector{InputStreamAdapter}
+    status_proxy::Union{Nothing,StatusProxy}
+    property_proxy::Union{Nothing,PropertyProxy}
     clock::C
     properties::P
     id_gen::ID
@@ -57,29 +64,132 @@ Event management system that encapsulates event dispatch, communications, and st
     property_registry::Vector{PublicationConfig}
 end
 
-# Include proxy modules after RtcAgent is defined
-include("status_proxy.jl")
-include("property_proxy.jl")
-
 function RtcAgent(client::Aeron.Client, comms::CommunicationResources, properties::Properties, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
     fetch!(clock)
 
     id_gen = SnowflakeIdGenerator(properties[:NodeId], clock)
     timers = PolledTimer(clock)
 
-    # Create the agent with property management fields
+    # Create the agent with proxy fields initialized to nothing
     RtcAgent(
         client,
         0,
-        Ref{Int64}(0),
         comms,
-        nothing,
-        InputStreamAdapter[],
+        nothing,                    # control_adapter
+        InputStreamAdapter[],       # input_adapters
+        nothing,                    # status_proxy
+        nothing,                    # property_proxy
         clock,
         properties,
         id_gen,
         timers,
         PublicationConfig[]
+    )
+end
+
+# =============================================================================
+# Agent Convenience Functions for Proxy Operations
+# =============================================================================
+
+"""
+Publish a status event using the agent's status proxy (convenience method).
+"""
+function publish_status_event(agent::RtcAgent, event::Symbol, data=nothing)
+    if isnothing(agent.status_proxy)
+        throw(AgentStateError(event, "Agent status proxy not initialized"))
+    end
+
+    correlation_id = next_id(agent.id_gen)
+    timestamp = time_nanos(agent.clock)
+
+    return publish_status_event(
+        agent.status_proxy, event, data, agent.properties[:Name], correlation_id, timestamp
+    )
+end
+
+"""
+Publish a status event using the agent's status proxy with specific correlation ID (convenience method).
+"""
+function publish_status_event(agent::RtcAgent, event::Symbol, data, correlation_id::Int64)
+    if isnothing(agent.status_proxy)
+        throw(AgentStateError(event, "Agent status proxy not initialized"))
+    end
+
+    timestamp = time_nanos(agent.clock)
+
+    return publish_status_event(
+        agent.status_proxy, event, data, agent.properties[:Name], correlation_id, timestamp
+    )
+end
+
+"""
+Publish a state change event using the agent's status proxy (convenience method).
+"""
+function publish_state_change(agent::RtcAgent, new_state::Symbol)
+    if isnothing(agent.status_proxy)
+        throw(AgentStateError(new_state, "Agent status proxy not initialized"))
+    end
+
+    correlation_id = next_id(agent.id_gen)
+    timestamp = time_nanos(agent.clock)
+
+    return publish_state_change(
+        agent.status_proxy, new_state, agent.properties[:Name], correlation_id, timestamp
+    )
+end
+
+"""
+Publish an event response using the agent's status proxy (convenience method).
+"""
+function publish_event_response(agent::RtcAgent, event::Symbol, value)
+    if isnothing(agent.status_proxy)
+        throw(AgentStateError(event, "Agent status proxy not initialized"))
+    end
+
+    correlation_id = next_id(agent.id_gen)
+    timestamp = time_nanos(agent.clock)
+
+    return publish_event_response(
+        agent.status_proxy, event, value, agent.properties[:Name], correlation_id, timestamp
+    )
+end
+
+"""
+Publish a property value to a specific output stream using the agent's property proxy (convenience method).
+"""
+function publish_property(agent::RtcAgent, stream_index::Int, field::Symbol, value)
+    if isnothing(agent.property_proxy)
+        throw(AgentStateError(field, "Agent property proxy not initialized"))
+    end
+
+    # Validate field exists in properties
+    if !haskey(agent.properties, field)
+        throw(KeyError("Property $field not found in agent"))
+    end
+
+    correlation_id = next_id(agent.id_gen)
+    timestamp = time_nanos(agent.clock)
+
+    return publish_property(
+        agent.property_proxy, stream_index, field, value,
+        agent.properties[:Name], correlation_id, timestamp
+    )
+end
+
+"""
+Publish a single property update with strategy evaluation using the agent's property proxy (convenience method).
+"""
+function publish_property_update(agent::RtcAgent, config::PublicationConfig)
+    if isnothing(agent.property_proxy)
+        throw(AgentStateError(config.field, "Agent property proxy not initialized"))
+    end
+
+    now = time_nanos(agent.clock)
+
+    # Delegate to proxy with business logic parameters
+    return publish_property_update(
+        agent.property_proxy, config, agent.properties,
+        agent.properties[:Name], agent.id_gen, now
     )
 end
 
@@ -295,9 +405,24 @@ function Agent.on_start(agent::RtcAgent)
             push!(agent.input_adapters, InputStreamAdapter(input_stream, agent))
         end
 
+        # Create proxy instances
+        agent.status_proxy = StatusProxy(
+            Ref{Int64}(0),
+            Vector{UInt8}(undef, 1 << 20),
+            agent.comms.status_stream
+        )
+
+        agent.property_proxy = PropertyProxy(
+            Ref{Int64}(0),
+            Vector{UInt8}(undef, 1 << 20),
+            agent.comms.output_streams
+        )
+
     catch e
         throw(AgentCommunicationError("Failed to initialize communication resources: $(e)"))
     end
+
+    nothing
 end
 
 """
@@ -311,10 +436,12 @@ function Agent.on_close(agent::RtcAgent)
 
     # Close communication resources
     close(agent.comms)
-    
-    # Clear adapters
+
+    # Clear adapters and proxies
     agent.control_adapter = nothing
     empty!(agent.input_adapters)
+    agent.status_proxy = nothing
+    agent.property_proxy = nothing
 end
 
 function Agent.on_error(agent::RtcAgent, error)

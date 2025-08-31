@@ -12,7 +12,7 @@ function test_rtcagent(client)
         @test agent isa RtcAgent
         @test agent.client === client
         @test agent.source_correlation_id == 0
-        @test agent.position_ptr[] == 0
+        # @test agent.position_ptr[] == 0  # REMOVED - position_ptr moved to proxy structs
         @test agent.comms === comms
         @test !isnothing(agent.clock)
         @test !isnothing(agent.properties)
@@ -21,6 +21,8 @@ function test_rtcagent(client)
         @test isempty(agent.property_registry)
         @test agent.control_adapter === nothing  # Not yet initialized
         @test isempty(agent.input_adapters)      # Not yet initialized
+        @test agent.status_proxy === nothing     # Not yet initialized
+        @test agent.property_proxy === nothing   # Not yet initialized
         
         # Test construction with specific clock
         clock2 = CachedEpochClock(EpochClock())

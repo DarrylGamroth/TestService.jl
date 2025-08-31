@@ -81,8 +81,6 @@ function test_adapters(client)
         @test !isnothing(comms.control_stream)
         @test comms.input_streams isa Vector{Aeron.Subscription}
         @test comms.output_streams isa Vector{Aeron.Publication}
-        @test comms.buf isa Vector{UInt8}
-        @test length(comms.buf) > 0
         
         # Test that streams are created according to properties
         @test comms.status_stream isa Aeron.Publication

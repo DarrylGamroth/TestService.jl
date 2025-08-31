@@ -34,7 +34,6 @@ function test_communications(client)
         @test !isnothing(comms.control_stream)
         @test comms.input_streams isa Vector
         @test comms.output_streams isa Vector
-        @test !isnothing(comms.buf)
         
         # Test agent construction with dependency injection
         agent = RtcAgent(client, comms, properties, clock)

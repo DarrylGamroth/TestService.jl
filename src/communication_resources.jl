@@ -1,14 +1,15 @@
 """
     CommunicationResources
 
-Manages all Aeron communication streams and buffers for an RTC agent.
+Manages all Aeron communication streams for an RTC agent.
 
 # Fields
 - `status_stream::Aeron.Publication` - Stream for publishing agent status
 - `control_stream::Aeron.Subscription` - Stream for receiving control commands
 - `input_streams::Vector{Aeron.Subscription}` - Streams for receiving input data
 - `output_streams::Vector{Aeron.Publication}` - Streams for publishing output data
-- `buf::Vector{UInt8}` - Shared buffer for message serialization
+
+Note: Buffers for message serialization are now owned by individual proxy instances.
 """
 struct CommunicationResources
     # Aeron streams
@@ -16,9 +17,6 @@ struct CommunicationResources
     control_stream::Aeron.Subscription
     input_streams::Vector{Aeron.Subscription}
     output_streams::Vector{Aeron.Publication}
-
-    # Shared buffer
-    buf::Vector{UInt8}
 
     function CommunicationResources(client::Aeron.Client, p::Properties)
         status_uri = p[:StatusURI]
@@ -76,14 +74,11 @@ struct CommunicationResources
             @info "No PubDataConnectionCount found in properties, no publications created"
         end
 
-        buf = Vector{UInt8}(undef, 1 << 23)  # Default buffer size
-
         new(
             status_stream,
             control_stream,
             input_streams,
-            output_streams,
-            buf
+            output_streams
         )
     end
 end

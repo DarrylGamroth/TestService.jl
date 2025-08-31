@@ -29,12 +29,18 @@ function test_timers(client)
         comms = CommunicationResources(client, properties)
         agent = RtcAgent(client, comms, properties, clock)
         
+        # Initialize the agent to set up proxies
+        Agent.on_start(agent)
+        
         # Test that agent has timer system
         @test !isnothing(agent.timers)
         @test agent.timers isa PolledTimer
         
         # Test timer polling (should not error)
         @test_nowarn timer_poller(agent)
+        
+        # Clean up
+        Agent.on_close(agent)
     end
     
     # Additional timer tests would go here

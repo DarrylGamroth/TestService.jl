@@ -5,6 +5,20 @@ Contains the core publish_value and publish_event functions used by all proxies.
 """
 
 # =============================================================================
+# Proxy Struct Definition
+# =============================================================================
+
+"""
+Status proxy struct for dedicated status stream publishing.
+Contains only the minimal components needed for Aeron message publishing.
+"""
+struct StatusProxy
+    position_ptr::Base.RefValue{Int64}
+    buffer::Vector{UInt8}
+    publication::Aeron.Publication
+end
+
+# =============================================================================
 # Core Publishing Functions (moved from communications.jl)
 # =============================================================================
 
@@ -175,33 +189,29 @@ function publish_event(
 end
 
 # =============================================================================
-# Status Proxy Functions
+# Status Proxy Functions (Direct Proxy Interface)
 # =============================================================================
 
-function publish_status_event(agent::RtcAgent, event::Symbol, data, correlation_id::Int64)
-    timestamp = time_nanos(agent.clock)
-    
+"""
+Publish a status event using the proxy struct interface.
+"""
+function publish_status_event(proxy::StatusProxy, event::Symbol, data, tag::String, correlation_id::Int64, timestamp_ns::Int64)
     return publish_value(
-        event, data, agent.properties[:Name], correlation_id, timestamp,
-        agent.comms.status_stream, agent.comms.buf, agent.position_ptr
+        event, data, tag, correlation_id, timestamp_ns,
+        proxy.publication, proxy.buffer, proxy.position_ptr
     )
 end
 
-function publish_state_change(agent::RtcAgent, new_state::Symbol, correlation_id::Int64)
-    return publish_status_event(agent, :StateChange, new_state, correlation_id)
+"""
+Publish a state change event using the proxy struct interface.
+"""
+function publish_state_change(proxy::StatusProxy, new_state::Symbol, tag::String, correlation_id::Int64, timestamp_ns::Int64)
+    return publish_status_event(proxy, :StateChange, new_state, tag, correlation_id, timestamp_ns)
 end
 
-# =============================================================================
-# Future Extension Point: Custom Status Encoders
-# =============================================================================
-
-# When different SBE encoders are needed:
-# struct StatusProxy{E<:AbstractEncoder}
-#     agent_name::String
-#     encoder::E
-#     correlation_id_generator::SnowflakeIdGenerator
-#     clock::AbstractClock
-#     buffer::Vector{UInt8}
-#     position_ptr::Ref{Int64}
-#     publication::Aeron.Publication
-# end
+"""
+Publish an event response using the proxy struct interface.
+"""
+function publish_event_response(proxy::StatusProxy, event::Symbol, value, tag::String, correlation_id::Int64, timestamp_ns::Int64)
+    return publish_status_event(proxy, event, value, tag, correlation_id, timestamp_ns)
+end

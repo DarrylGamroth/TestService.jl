@@ -8,11 +8,9 @@
 end
 
 @on_entry function (sm::RtcAgent, ::Playing)
-    register!(sm, :TestMatrix, 1, Periodic(1_000_000_000))
     nothing
 end
 
 @on_exit function (sm::RtcAgent, ::Playing)
-    unregister!(sm, :TestMatrix)
     nothing
 end
