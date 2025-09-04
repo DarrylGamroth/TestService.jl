@@ -5,9 +5,9 @@ Tests basic communication setup without requiring actual Aeron streams.
 function test_communications(client)
     @testset "Message Publishing" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
+        properties = TestService.PropertyStore.Properties(clock)
+        comms = TestService.CommunicationResources(client, properties)
+        agent = RtcAgent(comms, properties, clock)
         Agent.on_start(agent)  # Initialize adapters
         
         # Test that basic agent setup works
@@ -24,19 +24,19 @@ function test_communications(client)
     
     @testset "Communication Setup" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
+        properties = TestService.PropertyStore.Properties(clock)
 
         # Test communication resources creation
-        comms = CommunicationResources(client, properties)
+        comms = TestService.CommunicationResources(client, properties)
         @test !isnothing(comms)
-        @test comms isa CommunicationResources
+        @test comms isa TestService.CommunicationResources
         @test !isnothing(comms.status_stream)
         @test !isnothing(comms.control_stream)
         @test comms.input_streams isa Vector
         @test comms.output_streams isa Vector
         
         # Test agent construction with dependency injection
-        agent = RtcAgent(client, comms, properties, clock)
+        agent = RtcAgent(comms, properties, clock)
         @test !isnothing(agent)
         @test !isnothing(agent.properties)
         @test agent.comms === comms

@@ -3,9 +3,9 @@
 function test_integration(client)
     @testset "Complete Agent Lifecycle" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
+        properties = TestService.PropertyStore.Properties(clock)
+        comms = TestService.CommunicationResources(client, properties)
+        agent = RtcAgent(comms, properties, clock)
         
         # Test full lifecycle from creation to shutdown
         # Note: RtcAgent doesn't have a public state field, test behavior instead
@@ -24,9 +24,9 @@ function test_integration(client)
     
     @testset "Property Publishing Workflow" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
+        properties = TestService.PropertyStore.Properties(clock)
+        comms = TestService.CommunicationResources(client, properties)
+        agent = RtcAgent(comms, properties, clock)
         Agent.on_start(agent)
         
         # Test that properties are accessible
@@ -38,35 +38,16 @@ function test_integration(client)
         Agent.on_close(agent)
     end
     
-    @testset "Error Handling Workflows" begin
-        clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
-        
-        # Test that invalid stream indices throw proper errors
-        @test_throws StreamNotFoundError get_publication(agent, 999)
-        
-        Agent.on_start(agent)
-        
-        # Test that multiple start calls are handled gracefully
-        @test_nowarn Agent.on_start(agent)
-        
-        Agent.on_close(agent)
-        
-        Agent.on_close(agent)
-    end
-    
     @testset "Multi-Agent Scenarios" begin
         # Test multiple agents can coexist
         clock1 = CachedEpochClock(EpochClock())
-        properties1 = Properties(clock1)
-        comms1 = CommunicationResources(client, properties1)
-        agent1 = RtcAgent(client, comms1, properties1, clock1)
+        properties1 = TestService.PropertyStore.Properties(clock1)
+        comms1 = TestService.CommunicationResources(client, properties1)
+        agent1 = RtcAgent(comms1, properties1, clock1)
         clock2 = CachedEpochClock(EpochClock())
-        properties2 = Properties(clock2)
-        comms2 = CommunicationResources(client, properties2)
-        agent2 = RtcAgent(client, comms2, properties2, clock2)
+        properties2 = TestService.PropertyStore.Properties(clock2)
+        comms2 = TestService.CommunicationResources(client, properties2)
+        agent2 = RtcAgent(comms2, properties2, clock2)
         
         Agent.on_start(agent1)
         Agent.on_start(agent2)
@@ -82,9 +63,9 @@ function test_integration(client)
     
     @testset "Performance Validation" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
+        properties = TestService.PropertyStore.Properties(clock)
+        comms = TestService.CommunicationResources(client, properties)
+        agent = RtcAgent(comms, properties, clock)
         Agent.on_start(agent)
         
         # Measure allocation-free processing

@@ -25,9 +25,9 @@ function test_timers(client)
     
     @testset "Timer Integration with Agent" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
+        properties = TestService.PropertyStore.Properties(clock)
+        comms = TestService.CommunicationResources(client, properties)
+        agent = RtcAgent(comms, properties, clock)
         
         # Initialize the agent to set up proxies
         Agent.on_start(agent)
@@ -37,7 +37,7 @@ function test_timers(client)
         @test agent.timers isa PolledTimer
         
         # Test timer polling (should not error)
-        @test_nowarn timer_poller(agent)
+        @test_nowarn TestService.timer_poller(agent)
         
         # Clean up
         Agent.on_close(agent)

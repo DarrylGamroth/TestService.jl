@@ -4,9 +4,9 @@
 function test_utilities(client)
     @testset "Property Value Handling" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
+        properties = TestService.PropertyStore.Properties(clock)
+        comms = TestService.CommunicationResources(client, properties)
+        agent = RtcAgent(comms, properties, clock)
         Agent.on_start(agent)
         
         # Test that properties exist and are accessible

@@ -5,14 +5,13 @@
 
 @on_event function (sm::RtcAgent, state::Root, event::Any, message::EventMessage)
     @info "Default handler called with event: $(event)"
-    properties = sm.properties
-    if event in keynames(properties)
+    if event in keynames(sm.properties)
         if SpidersMessageCodecs.format(message) == SpidersMessageCodecs.Format.NOTHING
             # If the message has no value, then it is a request for the current value
-            handle_property_read(sm, properties, event, message)
+            handle_property_read(sm, event, message)
         else
             # Otherwise it's a write request
-            handle_property_write(sm, properties, event, message)
+            handle_property_write(sm, event, message)
         end
         return Hsm.EventHandled
     end

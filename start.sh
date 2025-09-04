@@ -20,7 +20,7 @@ export CONTROL_FILTER="TestService"
 export SUB_DATA_URI_1="aeron:udp?endpoint=localhost:40123"
 export SUB_DATA_STREAM_1=10
 
-export PUB_DATA_URI_1="aeron:udp?endpoint=localhost:40123"
+export PUB_DATA_URI_1="aeron:udp?endpoint=localhost:40123|term-length=128m"
 export PUB_DATA_STREAM_1=12
 
 # export PUB_DATA_URI_2="aeron:udp?endpoint=localhost:40123"

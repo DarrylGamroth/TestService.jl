@@ -72,34 +72,32 @@ end
 # Communication-specific exceptions
 
 """
-    ClaimBufferError(publication::String, length::Int, attempts_made::Int, max_attempts::Int)
+    ClaimBufferError(publication::String, length::Int, max_attempts::Int)
 
 Thrown when unable to claim a buffer from an Aeron publication after maximum retry attempts.
 """
 struct ClaimBufferError <: CommunicationError
     publication::String
     length::Int
-    attempts_made::Int
     max_attempts::Int
 end
 
 function Base.showerror(io::IO, e::ClaimBufferError)
-    print(io, "ClaimBufferError: Failed to claim buffer of length $(e.length) from publication $(e.publication) after $(e.attempts_made)/$(e.max_attempts) attempts")
+    print(io, "ClaimBufferError: Failed to claim buffer of length $(e.length) from publication $(e.publication) after $(e.max_attempts) attempts")
 end
 
 """
-    PublicationBackPressureError(publication::String, attempts_made::Int, max_attempts::Int)
+    PublicationBackPressureError(publication::String, max_attempts::Int)
 
 Thrown when unable to offer a buffer to an Aeron publication due to persistent back pressure.
 """
 struct PublicationBackPressureError <: CommunicationError
     publication::String
-    attempts_made::Int
     max_attempts::Int
 end
 
 function Base.showerror(io::IO, e::PublicationBackPressureError)
-    print(io, "PublicationBackPressureError: Failed to offer buffer to publication $(e.publication) after $(e.attempts_made)/$(e.max_attempts) attempts due to back pressure")
+    print(io, "PublicationBackPressureError: Failed to offer buffer to publication $(e.publication) after $(e.max_attempts) attempts due to back pressure")
 end
 
 """
@@ -127,4 +125,33 @@ end
 
 function Base.showerror(io::IO, e::CommunicationNotInitializedError)
     print(io, "CommunicationNotInitializedError: Cannot perform '$(e.operation)' - communications not initialized")
+end
+
+"""
+    PublicationFailureError(publication::String, max_attempts::Int)
+
+Thrown when unable to offer a buffer to an Aeron publication due to unexpected errors.
+"""
+struct PublicationFailureError <: CommunicationError
+    publication::String
+    max_attempts::Int
+end
+
+function Base.showerror(io::IO, e::PublicationFailureError)
+    print(io, "PublicationFailureError: Failed to offer buffer to publication $(e.publication) after $(e.max_attempts) attempts due to unexpected errors")
+end
+
+"""
+    ClaimBackPressureError(publication::String, length::Int, max_attempts::Int)
+
+Thrown when unable to claim a buffer from an Aeron publication due to persistent back pressure.
+"""
+struct ClaimBackPressureError <: CommunicationError
+    publication::String
+    length::Int
+    max_attempts::Int
+end
+
+function Base.showerror(io::IO, e::ClaimBackPressureError)
+    print(io, "ClaimBackPressureError: Failed to claim buffer of length $(e.length) from publication $(e.publication) after $(e.max_attempts) attempts due to back pressure")
 end

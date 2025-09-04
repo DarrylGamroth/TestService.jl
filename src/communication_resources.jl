@@ -4,24 +4,22 @@
 Manages all Aeron communication streams for an RTC agent.
 
 # Fields
-- `status_stream::Aeron.Publication` - Stream for publishing agent status
+- `status_stream::Aeron.ExclusivePublication` - Stream for publishing agent status
 - `control_stream::Aeron.Subscription` - Stream for receiving control commands
 - `input_streams::Vector{Aeron.Subscription}` - Streams for receiving input data
-- `output_streams::Vector{Aeron.Publication}` - Streams for publishing output data
+- `output_streams::Vector{Aeron.ExclusivePublication}` - Streams for publishing output data
 
-Note: Buffers for message serialization are now owned by individual proxy instances.
 """
 struct CommunicationResources
-    # Aeron streams
-    status_stream::Aeron.Publication
+    status_stream::Aeron.ExclusivePublication
+    output_streams::Vector{Aeron.ExclusivePublication}
     control_stream::Aeron.Subscription
     input_streams::Vector{Aeron.Subscription}
-    output_streams::Vector{Aeron.Publication}
 
     function CommunicationResources(client::Aeron.Client, p::Properties)
         status_uri = p[:StatusURI]
         status_stream_id = p[:StatusStreamID]
-        status_stream = Aeron.add_publication(client, status_uri, status_stream_id)
+        status_stream = Aeron.add_exclusive_publication(client, status_uri, status_stream_id)
 
         control_uri = p[:ControlURI]
         control_stream_id = p[:ControlStreamID]
@@ -47,7 +45,7 @@ struct CommunicationResources
         end
 
         # Initialize output streams registry and buffer
-        output_streams = Aeron.Publication[]
+        output_streams = Aeron.ExclusivePublication[]
 
         # Set up PubData publications
         if haskey(p, :PubDataConnectionCount)
@@ -63,7 +61,7 @@ struct CommunicationResources
                 if haskey(p, uri_key) && haskey(p, stream_id_key)
                     uri = p[uri_key]
                     stream_id = p[stream_id_key]
-                    publication = Aeron.add_publication(client, uri, stream_id)
+                    publication = Aeron.add_exclusive_publication(client, uri, stream_id)
                     output_streams[i] = publication
                     @info "Created publication $i: $uri (stream ID: $stream_id)"
                 else
@@ -74,12 +72,10 @@ struct CommunicationResources
             @info "No PubDataConnectionCount found in properties, no publications created"
         end
 
-        new(
-            status_stream,
+        new(status_stream,
+            output_streams,
             control_stream,
-            input_streams,
-            output_streams
-        )
+            input_streams)
     end
 end
 
@@ -98,10 +94,3 @@ function Base.close(c::CommunicationResources)
     close(c.control_stream)
     close(c.status_stream)
 end
-
-"""
-    Base.isopen(c::CommunicationResources) -> Bool
-
-Check if the communication resources are open by checking the status stream.
-"""
-Base.isopen(c::CommunicationResources) = isopen(c.status_stream)

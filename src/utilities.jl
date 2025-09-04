@@ -10,14 +10,14 @@ function decode_property_value(message, ::Type{T}) where {T}
     SpidersMessageCodecs.value(message, T)
 end
 
-function set_property_value!(properties, event, value, ::Type{T}) where {T<:AbstractArray}
+function set_property_value!(properties::AbstractStaticKV, event, value, ::Type{T}) where {T<:AbstractArray}
     # If the property is an array, we need to collect it
     # TODO: It would be better to copy the contents instead of collecting
     # to avoid unnecessary allocations
     setindex!(properties, collect(value), event)
 end
 
-function set_property_value!(properties, event, value, ::Type{T}) where {T<:AbstractString}
+function set_property_value!(properties::AbstractStaticKV, event, value, ::Type{T}) where {T<:AbstractString}
     # If the property is a string, we need to collect it
     # TODO: It would be better to copy the contents instead of collecting
     # to avoid unnecessary allocations
@@ -25,21 +25,21 @@ function set_property_value!(properties, event, value, ::Type{T}) where {T<:Abst
 end
 
 # Generic fallback for all other types (bits types, etc.)
-function set_property_value!(properties, event, value, ::Type{T}) where {T}
+function set_property_value!(properties::AbstractStaticKV, event, value, ::Type{T}) where {T}
     setindex!(properties, value, event)
 end
 
-function handle_property_write(sm::RtcAgent, properties, event, message)
-    prop_type = keytype(properties, event)
+function handle_property_write(sm::RtcAgent, event, message)
+    prop_type = keytype(sm.properties, event)
     value = decode_property_value(message, prop_type)
     
-    set_property_value!(properties, event, value, prop_type)
+    set_property_value!(sm.properties, event, value, prop_type)
     publish_status_event(sm, event, value, sm.source_correlation_id)
 end
 
-function handle_property_read(sm::RtcAgent, properties, event, _)
-    if isset(properties, event)
-        value = properties[event]
+function handle_property_read(sm::RtcAgent, event, _)
+    if isset(sm.properties, event)
+        value = sm.properties[event]
         publish_status_event(sm, event, value, sm.source_correlation_id)
     end
 end

@@ -15,30 +15,24 @@ include("communication_resources.jl")
 include("control_stream_adapter.jl")
 include("input_stream_adapter.jl")
 
-export RtcAgent, dispatch!,
-    input_poller, control_poller, property_poller, timer_poller,
+export RtcAgent,
+    # Publishing strategies for extension services
     PublishStrategy, OnUpdate, Periodic, Scheduled, RateLimited,
-    publish_status_event, publish_state_change,
-    publish_property, publish_property_update,
-    StatusProxy, PropertyProxy,  # Export proxy struct types
-    register!, unregister!, isregistered, list, get_publication,
-    PolledTimer,
-    should_publish, next_time,
-    # Exception types
-    AgentError, AgentStateError, AgentStartupError, ClaimBufferError,
-    CommunicationError, CommunicationNotInitializedError, StreamNotFoundError,
-    PublicationBackPressureError, SubscriptionError, MessageProcessingError
+    # Property registration for extension services
+    register!, unregister!, isregistered, list,
+    # Timer scheduling for extension services
+    PolledTimer, schedule!, schedule_at!, cancel!
 
-const DEFAULT_FRAGMENT_COUNT_LIMIT = 10
-const DEFAULT_PUBLICATION_BUFFER_SIZE = (1 << 21)
+const DEFAULT_INPUT_FRAGMENT_COUNT_LIMIT = 10
+const DEFAULT_CONTROL_FRAGMENT_COUNT_LIMIT = 1
 
 mutable struct PublicationConfig
-    field::Symbol
-    stream::Aeron.Publication
-    stream_index::Int
-    strategy::PublishStrategy
     last_published_ns::Int64
     next_scheduled_ns::Int64
+    field::Symbol
+    stream_index::Int
+    strategy::PublishStrategy
+    stream::Aeron.ExclusivePublication
 end
 
 """
@@ -50,21 +44,20 @@ include("status_proxy.jl")
 include("property_proxy.jl")
 
 @hsmdef mutable struct RtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeIdGenerator,ET<:PolledTimer}
-    client::Aeron.Client
-    source_correlation_id::Int64
-    comms::CommunicationResources
-    control_adapter::Union{Nothing,ControlStreamAdapter}
-    input_adapters::Vector{InputStreamAdapter}
-    status_proxy::Union{Nothing,StatusProxy}
-    property_proxy::Union{Nothing,PropertyProxy}
     clock::C
     properties::P
     id_gen::ID
     timers::ET
+    comms::CommunicationResources
+    status_proxy::Union{Nothing,StatusProxy}
+    property_proxy::Union{Nothing,PropertyProxy}
+    control_adapter::Union{Nothing,ControlStreamAdapter}
+    input_adapters::Vector{InputStreamAdapter}
     property_registry::Vector{PublicationConfig}
+    source_correlation_id::Int64
 end
 
-function RtcAgent(client::Aeron.Client, comms::CommunicationResources, properties::Properties, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
+function RtcAgent(comms::CommunicationResources, properties::AbstractStaticKV, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
     fetch!(clock)
 
     id_gen = SnowflakeIdGenerator(properties[:NodeId], clock)
@@ -72,18 +65,17 @@ function RtcAgent(client::Aeron.Client, comms::CommunicationResources, propertie
 
     # Create the agent with proxy fields initialized to nothing
     RtcAgent(
-        client,
-        0,
-        comms,
-        nothing,                    # control_adapter
-        InputStreamAdapter[],       # input_adapters
-        nothing,                    # status_proxy
-        nothing,                    # property_proxy
         clock,
         properties,
         id_gen,
         timers,
-        PublicationConfig[]
+        comms,
+        nothing,
+        nothing,
+        nothing,
+        InputStreamAdapter[],
+        PublicationConfig[],
+        0
     )
 end
 
@@ -94,23 +86,7 @@ end
 """
 Publish a status event using the agent's status proxy (convenience method).
 """
-function publish_status_event(agent::RtcAgent, event::Symbol, data=nothing)
-    if isnothing(agent.status_proxy)
-        throw(AgentStateError(event, "Agent status proxy not initialized"))
-    end
-
-    correlation_id = next_id(agent.id_gen)
-    timestamp = time_nanos(agent.clock)
-
-    return publish_status_event(
-        agent.status_proxy, event, data, agent.properties[:Name], correlation_id, timestamp
-    )
-end
-
-"""
-Publish a status event using the agent's status proxy with specific correlation ID (convenience method).
-"""
-function publish_status_event(agent::RtcAgent, event::Symbol, data, correlation_id::Int64)
+function publish_status_event(agent::RtcAgent, event::Symbol, data, correlation_id::Int64=next_id(agent.id_gen))
     if isnothing(agent.status_proxy)
         throw(AgentStateError(event, "Agent status proxy not initialized"))
     end
@@ -125,12 +101,11 @@ end
 """
 Publish a state change event using the agent's status proxy (convenience method).
 """
-function publish_state_change(agent::RtcAgent, new_state::Symbol)
+function publish_state_change(agent::RtcAgent, new_state::Symbol, correlation_id::Int64=next_id(agent.id_gen))
     if isnothing(agent.status_proxy)
         throw(AgentStateError(new_state, "Agent status proxy not initialized"))
     end
 
-    correlation_id = next_id(agent.id_gen)
     timestamp = time_nanos(agent.clock)
 
     return publish_state_change(
@@ -141,12 +116,11 @@ end
 """
 Publish an event response using the agent's status proxy (convenience method).
 """
-function publish_event_response(agent::RtcAgent, event::Symbol, value)
+function publish_event_response(agent::RtcAgent, event::Symbol, value, correlation_id::Int64=next_id(agent.id_gen))
     if isnothing(agent.status_proxy)
         throw(AgentStateError(event, "Agent status proxy not initialized"))
     end
 
-    correlation_id = next_id(agent.id_gen)
     timestamp = time_nanos(agent.clock)
 
     return publish_event_response(
@@ -157,7 +131,7 @@ end
 """
 Publish a property value to a specific output stream using the agent's property proxy (convenience method).
 """
-function publish_property(agent::RtcAgent, stream_index::Int, field::Symbol, value)
+function publish_property(agent::RtcAgent, stream_index::Int, field::Symbol, value, correlation_id::Int64=next_id(agent.id_gen))
     if isnothing(agent.property_proxy)
         throw(AgentStateError(field, "Agent property proxy not initialized"))
     end
@@ -167,13 +141,10 @@ function publish_property(agent::RtcAgent, stream_index::Int, field::Symbol, val
         throw(KeyError("Property $field not found in agent"))
     end
 
-    correlation_id = next_id(agent.id_gen)
     timestamp = time_nanos(agent.clock)
 
-    return publish_property(
-        agent.property_proxy, stream_index, field, value,
-        agent.properties[:Name], correlation_id, timestamp
-    )
+    return publish_property(agent.property_proxy, stream_index, field, value,
+        agent.properties[:Name], correlation_id, timestamp)
 end
 
 """
@@ -184,13 +155,12 @@ function publish_property_update(agent::RtcAgent, config::PublicationConfig)
         throw(AgentStateError(config.field, "Agent property proxy not initialized"))
     end
 
-    now = time_nanos(agent.clock)
+    timestamp = time_nanos(agent.clock)
+    correlation_id = next_id(agent.id_gen)
 
     # Delegate to proxy with business logic parameters
-    return publish_property_update(
-        agent.property_proxy, config, agent.properties,
-        agent.properties[:Name], agent.id_gen, now
-    )
+    return publish_property_update(agent.property_proxy, config, agent.properties,
+        agent.properties[:Name], correlation_id, timestamp)
 end
 
 """
@@ -226,7 +196,7 @@ Poll all input streams for incoming data messages using input stream adapters.
 Returns the number of fragments processed.
 """
 function input_poller(agent::RtcAgent)
-    poll(agent.input_adapters, DEFAULT_FRAGMENT_COUNT_LIMIT)
+    poll(agent.input_adapters, DEFAULT_INPUT_FRAGMENT_COUNT_LIMIT)
 end
 
 """
@@ -236,7 +206,7 @@ Poll the control stream for incoming control messages using the control stream a
 Returns the number of fragments processed.
 """
 function control_poller(agent::RtcAgent)
-    poll(agent.control_adapter, DEFAULT_FRAGMENT_COUNT_LIMIT)
+    poll(agent.control_adapter, DEFAULT_CONTROL_FRAGMENT_COUNT_LIMIT)
 end
 
 function timer_poller(agent::RtcAgent)
@@ -251,7 +221,7 @@ end
 
 Determine whether property polling should be active based on agent state.
 """
-@inline function should_poll_properties(agent::RtcAgent)
+function should_poll_properties(agent::RtcAgent)
     return Hsm.current(agent) === :Playing
 end
 
@@ -271,21 +241,6 @@ function property_poller(agent::RtcAgent)
 end
 
 """
-    get_publication(agent::RtcAgent, stream_index::Int) -> Aeron.Publication
-
-Get a publication stream by index (1-based).
-"""
-function get_publication(agent::RtcAgent, stream_index::Int)
-    output_streams = agent.comms.output_streams
-
-    if stream_index < 1 || stream_index > length(output_streams)
-        throw(StreamNotFoundError("PubData$stream_index", stream_index))
-    end
-
-    return output_streams[stream_index]
-end
-
-"""
     register!(agent::RtcAgent, field::Symbol, stream_index::Int, strategy::PublishStrategy)
 
 Register a property for publication using a publication stream by index.
@@ -297,17 +252,20 @@ function register!(agent::RtcAgent,
     stream_index::Int,
     strategy::PublishStrategy)
 
-    # Get the publication stream (this will validate bounds and availability)
-    publication = get_publication(agent, stream_index)
+    # Validate stream index and get publication
+    output_streams = agent.comms.output_streams
+    if stream_index < 1 || stream_index > length(output_streams)
+        throw(StreamNotFoundError("PubData$stream_index", stream_index))
+    end
 
     # Create and add the configuration to the registry
     config = PublicationConfig(
+        -1,        # last_published_ns - Never published
+        next_time(strategy, 0),  # next_scheduled_ns
         field,
-        publication,
         stream_index,
         strategy,
-        -1,        # Never published
-        next_time(strategy, 0)
+        output_streams[stream_index]
     )
     push!(agent.property_registry, config)
 
@@ -364,15 +322,6 @@ isregistered(agent::RtcAgent, field::Symbol) = any(config -> config.field == fie
 isregistered(agent::RtcAgent, field::Symbol, stream_index::Int) = any(config -> config.field == field && config.stream_index == stream_index, agent.property_registry)
 
 """
-    list(agent::RtcAgent)
-
-Return a list of all currently registered property publications as (field, stream_index, strategy) tuples.
-"""
-function list(agent::RtcAgent)
-    return [(config.field, config.stream_index, config.strategy) for config in agent.property_registry]
-end
-
-"""
     empty!(agent::RtcAgent) -> Int
 
 Clear all registered publications. Returns the number of registrations removed.
@@ -382,8 +331,6 @@ function Base.empty!(agent::RtcAgent)
     empty!(agent.property_registry)
     return count
 end
-
-
 
 # =============================================================================
 # Agent Interface Implementation
@@ -404,7 +351,6 @@ function Agent.on_start(agent::RtcAgent)
         # Create control stream adapter
         agent.control_adapter = ControlStreamAdapter(
             agent.comms.control_stream,
-            agent.properties,
             agent
         )
 
@@ -415,17 +361,8 @@ function Agent.on_start(agent::RtcAgent)
         end
 
         # Create proxy instances
-        agent.status_proxy = StatusProxy(
-            Ref{Int64}(0),
-            Vector{UInt8}(undef, 1 << 20),
-            agent.comms.status_stream
-        )
-
-        agent.property_proxy = PropertyProxy(
-            Ref{Int64}(0),
-            Vector{UInt8}(undef, 1 << 20),
-            agent.comms.output_streams
-        )
+        agent.status_proxy = StatusProxy(agent.comms.status_stream)
+        agent.property_proxy = PropertyProxy(agent.comms.output_streams)
 
     catch e
         throw(AgentCommunicationError("Failed to initialize communication resources: $(e)"))
@@ -448,9 +385,9 @@ function Agent.on_close(agent::RtcAgent)
 
     # Clear adapters and proxies
     agent.control_adapter = nothing
-    empty!(agent.input_adapters)
     agent.status_proxy = nothing
     agent.property_proxy = nothing
+    empty!(agent.input_adapters)
 end
 
 function Agent.on_error(agent::RtcAgent, error)

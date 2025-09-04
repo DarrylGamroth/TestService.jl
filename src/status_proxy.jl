@@ -1,7 +1,6 @@
 """
 Status proxy for publishing events and state changes to status stream.
 Handles all outbound status communication following the Aeron proxy pattern.
-Contains the core publish_value and publish_event functions used by all proxies.
 """
 
 # =============================================================================
@@ -14,27 +13,23 @@ Contains only the minimal components needed for Aeron message publishing.
 """
 struct StatusProxy
     position_ptr::Base.RefValue{Int64}
+    publication::Aeron.ExclusivePublication
     buffer::Vector{UInt8}
-    publication::Aeron.Publication
+    function StatusProxy(publication::Aeron.ExclusivePublication)
+        new(Ref{Int64}(0), publication, zeros(UInt8, 1024))
+    end
 end
 
-# =============================================================================
-# Core Publishing Functions (moved from communications.jl)
-# =============================================================================
-
 """
-Publish a scalar value to an Aeron stream with SBE encoding.
-Core proxy function that encodes application types to Aeron messages.
+Publish an event to an Aeron stream with SBE encoding.
 """
-function publish_value(
+function publish_status_event(
+    proxy::StatusProxy,
     field::Symbol,
     value::T,
     tag::AbstractString,
     correlation_id::Int64,
-    timestamp_ns::Int64,
-    publication,
-    _::AbstractArray{UInt8},
-    position_ptr::Base.RefValue{Int64}) where {T<:Union{AbstractString,Char,Real,Symbol,Tuple}}
+    timestamp_ns::Int64) where {T<:Union{AbstractString,Char,Real,Symbol,Tuple}}
 
     # Calculate buffer length needed
     len = sbe_encoded_length(MessageHeader) +
@@ -43,14 +38,14 @@ function publish_value(
           sizeof(value)
 
     # Try to claim the buffer
-    claim = try_claim(publication, len)
+    claim = try_claim(proxy.publication, len)
     if isnothing(claim)
         # No subscribers - skip publishing
         return nothing
     end
 
     # Create the message encoder
-    encoder = EventMessageEncoder(buffer(claim); position_ptr=position_ptr)
+    encoder = EventMessageEncoder(Aeron.buffer(claim); position_ptr=proxy.position_ptr)
     header = SpidersMessageCodecs.header(encoder)
 
     # Fill in the message
@@ -66,41 +61,37 @@ function publish_value(
     nothing
 end
 
-"""
-Publish an array value to an Aeron stream with SBE encoding.
-"""
-function publish_value(
+function publish_status_event(
+    proxy::StatusProxy,
     field::Symbol,
     value::T,
     tag::AbstractString,
     correlation_id::Int64,
-    timestamp_ns::Int64,
-    publication,
-    buffer::AbstractArray{UInt8},
-    position_ptr::Base.RefValue{Int64}) where {T<:AbstractArray}
+    timestamp_ns::Int64) where {T<:Exception}
 
-    # Calculate array data length
-    len = sizeof(eltype(value)) * length(value)
+    msg = string(value)
+    len = sizeof(msg)
 
-    # Create tensor message
-    encoder = TensorMessageEncoder(buffer; position_ptr=position_ptr)
+    # Create the message encoder
+    encoder = EventMessageEncoder(proxy.buffer; position_ptr=proxy.position_ptr)
     header = SpidersMessageCodecs.header(encoder)
+
+    # Fill in the message
     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
     SpidersMessageCodecs.correlationId!(header, correlation_id)
     SpidersMessageCodecs.tag!(header, tag)
-    SpidersMessageCodecs.format!(encoder, convert(SpidersMessageCodecs.Format.SbeEnum, eltype(value)))
-    SpidersMessageCodecs.majorOrder!(encoder, SpidersMessageCodecs.MajorOrder.COLUMN)
-    SpidersMessageCodecs.dims!(encoder, Int32.(size(value)))
-    SpidersMessageCodecs.origin!(encoder, nothing)
-    SpidersMessageCodecs.values_length!(encoder, len)
-    SpidersMessageCodecs.sbe_position!(encoder, sbe_position(encoder) + SpidersMessageCodecs.values_header_length(encoder))
-    tensor_message = convert(AbstractArray{UInt8}, encoder)
+    SpidersMessageCodecs.key!(encoder, field)
+    SpidersMessageCodecs.format!(encoder, convert(SpidersMessageCodecs.Format.SbeEnum, String))
+    @inbounds SpidersMessageCodecs.value_length!(encoder, len)
+    # value_length! doesn't increment the position, so we need to do it manually
+    SpidersMessageCodecs.sbe_position!(encoder, sbe_position(encoder) + SpidersMessageCodecs.value_header_length(encoder))
+    event_message = convert(AbstractArray{UInt8}, encoder)
 
-    # Offer the combined message
-    offer(publication,
+    # Offer in the correct order
+    offer(proxy.publication,
         (
-            tensor_message,
-            vec(reinterpret(UInt8, value))
+            event_message,
+            codeunits(msg)
         )
     )
 
@@ -108,41 +99,15 @@ function publish_value(
 end
 
 """
-Publish an event to an Aeron stream with SBE encoding.
-"""
-function publish_event(
-    field::Symbol,
-    value::T,
-    tag::AbstractString,
-    correlation_id::Int64,
-    timestamp_ns::Int64,
-    publication,
-    buffer::AbstractArray{UInt8},
-    position_ptr::Base.RefValue{Int64}) where {T<:Union{AbstractString,Char,Real,Symbol,Tuple}}
-    publish_value(
-        field,
-        value,
-        tag,
-        correlation_id,
-        timestamp_ns,
-        publication,
-        buffer,
-        position_ptr
-    )
-end
-
-"""
 Publish an array event to an Aeron stream with SBE encoding.
 """
-function publish_event(
+function publish_status_event(
+    proxy::StatusProxy,
     field::Symbol,
     value::T,
     tag::AbstractString,
     correlation_id::Int64,
-    timestamp_ns::Int64,
-    publication,
-    buffer::AbstractArray{UInt8},
-    position_ptr::Base.RefValue{Int64}) where {T<:AbstractArray}
+    timestamp_ns::Int64) where {T<:AbstractArray}
 
     # Encode the buffer headers in reverse order
 
@@ -150,7 +115,7 @@ function publish_event(
     len = sizeof(eltype(value)) * length(value)
 
     # Create tensor message
-    tensor = TensorMessageEncoder(buffer; position_ptr=position_ptr)
+    tensor = TensorMessageEncoder(proxy.buffer; position_ptr=proxy.position_ptr)
     header = SpidersMessageCodecs.header(tensor)
     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
     SpidersMessageCodecs.correlationId!(header, correlation_id)
@@ -159,47 +124,33 @@ function publish_event(
     SpidersMessageCodecs.majorOrder!(tensor, SpidersMessageCodecs.MajorOrder.COLUMN)
     SpidersMessageCodecs.dims!(tensor, Int32.(size(value)))
     SpidersMessageCodecs.origin!(tensor, nothing)
-    SpidersMessageCodecs.values_length!(tensor, len)
+    @inbounds SpidersMessageCodecs.values_length!(tensor, len)
     SpidersMessageCodecs.sbe_position!(tensor, sbe_position(tensor) + SpidersMessageCodecs.values_header_length(tensor))
     tensor_message = convert(AbstractArray{UInt8}, tensor)
     len += length(tensor_message)
 
-    event = EventMessageEncoder(buffer, sbe_position(tensor); position_ptr=position_ptr)
+    event = EventMessageEncoder(proxy.buffer, sbe_position(tensor); position_ptr=proxy.position_ptr)
     header = SpidersMessageCodecs.header(event)
     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
     SpidersMessageCodecs.correlationId!(header, correlation_id)
     SpidersMessageCodecs.tag!(header, tag)
     SpidersMessageCodecs.format!(event, SpidersMessageCodecs.Format.SBE)
     SpidersMessageCodecs.key!(event, field)
-    SpidersMessageCodecs.value_length!(event, len)
+    @inbounds SpidersMessageCodecs.value_length!(event, len)
     # value_length! doesn't increment the position, so we need to do it manually
     SpidersMessageCodecs.sbe_position!(event, sbe_position(event) + SpidersMessageCodecs.value_header_length(event))
     event_message = convert(AbstractArray{UInt8}, event)
 
     # Offer in the correct order
-    offer(publication,
+    offer(proxy.publication,
         (
             event_message,
             tensor_message,
             vec(reinterpret(UInt8, value))
         )
     )
-    
+
     nothing
-end
-
-# =============================================================================
-# Status Proxy Functions (Direct Proxy Interface)
-# =============================================================================
-
-"""
-Publish a status event using the proxy struct interface.
-"""
-function publish_status_event(proxy::StatusProxy, event::Symbol, data, tag::String, correlation_id::Int64, timestamp_ns::Int64)
-    return publish_value(
-        event, data, tag, correlation_id, timestamp_ns,
-        proxy.publication, proxy.buffer, proxy.position_ptr
-    )
 end
 
 """

@@ -31,7 +31,7 @@ end
 
 @on_event function (sm::RtcAgent, ::Top, event::Error, error::Exception)
     sm.source_correlation_id = next_id(sm.id_gen)
-    publish_status_event(sm, event, "$error", sm.source_correlation_id)
+    publish_status_event(sm, event, error, sm.source_correlation_id)
     return Hsm.EventHandled
 
     # Transition to Error state
@@ -57,9 +57,8 @@ end
 end
 
 @on_event function (sm::RtcAgent, ::Top, ::Properties, message)
-    properties = sm.properties
-    for name in keynames(properties)
-        handle_property_read(sm, properties, name, message)
+    for name in keynames(sm.properties)
+        handle_property_read(sm, name, message)
     end
     return Hsm.EventHandled
 end

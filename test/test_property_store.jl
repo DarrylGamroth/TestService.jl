@@ -5,7 +5,7 @@ Tests property access, timestamps, and type validation.
 function test_property_store()
     @testset "Property Access and Mutation" begin
         clock = CachedEpochClock(EpochClock())
-        props = Properties(clock)
+        props = TestService.PropertyStore.Properties(clock)
         
         # Test basic property access
         @test props[:Name] isa String
@@ -25,7 +25,7 @@ function test_property_store()
     
     @testset "Timestamp Tracking" begin
         clock = CachedEpochClock(EpochClock())
-        props = Properties(clock)
+        props = TestService.PropertyStore.Properties(clock)
         
         fetch!(clock)
         current_time = time_nanos(clock)

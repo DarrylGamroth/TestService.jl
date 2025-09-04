@@ -5,9 +5,9 @@ Tests the integration of strategies with actual property publishing.
 function test_property_publishing(client)
     @testset "Property Publication Workflow" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
+        properties = TestService.PropertyStore.Properties(clock)
+        comms = TestService.CommunicationResources(client, properties)
+        agent = RtcAgent(comms, properties, clock)
         Agent.on_start(agent)
         
         # Test that properties are accessible
@@ -21,9 +21,9 @@ function test_property_publishing(client)
     
     @testset "Periodic Publishing" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
+        properties = TestService.PropertyStore.Properties(clock)
+        comms = TestService.CommunicationResources(client, properties)
+        agent = RtcAgent(comms, properties, clock)
         Agent.on_start(agent)
         
         # Test basic agent functionality
@@ -34,9 +34,9 @@ function test_property_publishing(client)
     
     @testset "Multiple Strategy Integration" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
+        properties = TestService.PropertyStore.Properties(clock)
+        comms = TestService.CommunicationResources(client, properties)
+        agent = RtcAgent(comms, properties, clock)
         Agent.on_start(agent)
         
         # Test basic agent functionality
@@ -47,9 +47,9 @@ function test_property_publishing(client)
     
     @testset "Publication Config Management" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
+        properties = TestService.PropertyStore.Properties(clock)
+        comms = TestService.CommunicationResources(client, properties)
+        agent = RtcAgent(comms, properties, clock)
         
         # Test basic agent functionality without streams
         @test agent.property_registry isa Vector
@@ -61,9 +61,9 @@ function test_property_publishing(client)
     
     @testset "Strategy State Updates" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
+        properties = TestService.PropertyStore.Properties(clock)
+        comms = TestService.CommunicationResources(client, properties)
+        agent = RtcAgent(comms, properties, clock)
         Agent.on_start(agent)
         
         # Test basic agent functionality
@@ -81,14 +81,14 @@ function test_property_publishing(client)
         @test onupdate_strategy isa PublishStrategy
         
         # Test should_publish functions work
-        @test should_publish(onupdate_strategy, 100, -1, 200, 1500) isa Bool
+        @test TestService.should_publish(onupdate_strategy, 100, -1, 200, 1500) isa Bool
     end
     
     @testset "Zero Allocation Publishing" begin
         clock = CachedEpochClock(EpochClock())
-        properties = Properties(clock)
-        comms = CommunicationResources(client, properties)
-        agent = RtcAgent(client, comms, properties, clock)
+        properties = TestService.PropertyStore.Properties(clock)
+        comms = TestService.CommunicationResources(client, properties)
+        agent = RtcAgent(comms, properties, clock)
         Agent.on_start(agent)
         
         # Test basic agent functionality

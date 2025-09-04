@@ -33,23 +33,23 @@ function InputStreamAdapter(subscription::Aeron.Subscription, agent)
 end
 
 """
-    poll(adapter::InputStreamAdapter, limit::Int = 10) -> Int
+    poll(adapter::InputStreamAdapter, limit::Int) -> Int
 
 Poll the input stream for incoming messages.
 Returns the number of fragments processed.
 """
-function poll(adapter::InputStreamAdapter, limit::Int=10)
+function poll(adapter::InputStreamAdapter, limit::Int)
     return Aeron.poll(adapter.subscription, adapter.assembler, limit)
 end
 
 """
-    poll(adapters::Vector{InputStreamAdapter}, limit::Int = 10) -> Int
+    poll(adapters::Vector{InputStreamAdapter}, limit::Int) -> Int
 
 Poll all input stream adapters for incoming data messages.
 Returns the total number of fragments processed across all adapters.
 Uses the same polling strategy as the original input_poller.
 """
-function poll(adapters::Vector{InputStreamAdapter}, limit::Int=10)
+function poll(adapters::Vector{InputStreamAdapter}, limit::Int)
     work_count = 0
 
     while true

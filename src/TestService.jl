@@ -14,19 +14,7 @@ using .PropertyStore
 
 include("rtcagent.jl")
 
-export main, RtcAgent, 
-    PublishStrategy, OnUpdate, Periodic, Scheduled, RateLimited,
-    OnUpdateStrategy, PeriodicStrategy, ScheduledStrategy, RateLimitedStrategy,
-    should_publish, next_time, property_poller, timer_poller,
-    register!, unregister!, isregistered, list, get_publication,
-    # Communication and Adapter types
-    CommunicationResources, ControlStreamAdapter, InputStreamAdapter, Properties, poll,
-    # Timer functions  
-    schedule!, schedule_at!, cancel!,
-    # Exception types  
-    AgentError, AgentStateError, AgentStartupError, ClaimBufferError,
-    CommunicationError, CommunicationNotInitializedError, StreamNotFoundError,
-    PublicationBackPressureError, SubscriptionError, MessageProcessingError
+export main
 
 Base.exit_on_sigint(false)
 
@@ -56,11 +44,11 @@ function run_agent()
             comms = CommunicationResources(client, properties)
             
             # Inject communication resources into the agent
-            agent = RtcAgent(client, comms, properties, clock)
+            agent = RtcAgent(comms, properties, clock)
 
             # Start the agent
-            runner = AgentRunner(BusySpinIdleStrategy(), agent)
-            Agent.start_on_thread(runner)
+            runner = AgentRunner(BackoffIdleStrategy(), agent)
+            Agent.start_on_thread(runner, 2)
 
             try
                 wait(runner)

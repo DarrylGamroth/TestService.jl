@@ -9,7 +9,7 @@ end
 
 Create a control stream adapter with the given subscription.
 """
-function ControlStreamAdapter(subscription::Aeron.Subscription, properties, agent)
+function ControlStreamAdapter(subscription::Aeron.Subscription, agent)
     # Create position pointer for this adapter
     position_ptr = Ref{Int64}(0)
 
@@ -32,8 +32,8 @@ function ControlStreamAdapter(subscription::Aeron.Subscription, properties, agen
         end
 
         # Apply filtering if configured
-        if isset(properties, :ControlFilter)
-            message_filter = SpidersTagFragmentFilter(fragment_handler, properties[:ControlFilter])
+        if isset(agent.properties, :ControlFilter)
+            message_filter = SpidersTagFragmentFilter(fragment_handler, agent.properties[:ControlFilter])
             assembler = Aeron.FragmentAssembler(message_filter)
         else
             assembler = Aeron.FragmentAssembler(fragment_handler)
@@ -44,11 +44,11 @@ function ControlStreamAdapter(subscription::Aeron.Subscription, properties, agen
 end
 
 """
-    poll(adapter::ControlStreamAdapter, limit::Int = 10) -> Int
+    poll(adapter::ControlStreamAdapter, limit::Int) -> Int
 
 Poll the control stream for incoming messages.
 Returns the number of fragments processed.
 """
-function poll(adapter::ControlStreamAdapter, limit::Int=10)
+function poll(adapter::ControlStreamAdapter, limit::Int)
     return Aeron.poll(adapter.subscription, adapter.assembler, limit)
 end

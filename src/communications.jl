@@ -11,18 +11,18 @@ function try_claim(publication, length, max_attempts=10)
         claim, result = Aeron.try_claim(publication, length)
         if result > 0
             return claim
-        elseif result in (Aeron.PUBLICATION_BACK_PRESSURED, Aeron.PUBLICATION_ADMIN_ACTION)
+        elseif result == Aeron.PUBLICATION_BACK_PRESSURED
             attempts -= 1
             if attempts > 0
                 continue
             else
-                throw(ClaimBufferError(
+                throw(PublicationBackPressureError(
                     string(publication),
-                    length,
-                    max_attempts,
                     max_attempts
                 ))
             end
+        elseif result == Aeron.PUBLICATION_ADMIN_ACTION
+            continue
         elseif result == Aeron.PUBLICATION_NOT_CONNECTED
             # No subscribers connected - this is normal in some cases
             return nothing
@@ -32,10 +32,10 @@ function try_claim(publication, length, max_attempts=10)
             attempts -= 1
         end
     end
+    # If we reach here, we exhausted attempts due to unknown error codes
     throw(ClaimBufferError(
         string(publication),
         length,
-        max_attempts - attempts,
         max_attempts
     ))
 end
@@ -53,17 +53,18 @@ function offer(publication, buffer, max_attempts=10)
         result = Aeron.offer(publication, buffer)
         if result > 0
             return nothing
-        elseif result in (Aeron.PUBLICATION_BACK_PRESSURED, Aeron.PUBLICATION_ADMIN_ACTION)
+        elseif result == Aeron.PUBLICATION_BACK_PRESSURED
             attempts -= 1
             if attempts > 0
                 continue
             else
                 throw(PublicationBackPressureError(
                     string(publication),
-                    max_attempts,
                     max_attempts
                 ))
             end
+        elseif result == Aeron.PUBLICATION_ADMIN_ACTION
+            continue
         elseif result == Aeron.PUBLICATION_NOT_CONNECTED
             # No subscribers connected - this is normal, just return
             return nothing
@@ -73,9 +74,9 @@ function offer(publication, buffer, max_attempts=10)
             attempts -= 1
         end
     end
-    throw(PublicationBackPressureError(
+    # If we reach here, we exhausted attempts due to unknown error codes
+    throw(PublicationFailureError(
         string(publication),
-        max_attempts - attempts,
         max_attempts
     ))
 end

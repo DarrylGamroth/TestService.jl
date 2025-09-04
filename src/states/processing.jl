@@ -5,7 +5,7 @@
 
 @on_entry function (sm::RtcAgent, ::Processing)
     # Register properties for the agent's lifecycle
-    register!(sm, :TestMatrix, 1, Periodic(1_000_000_000))
+    register!(sm, :TestMatrix, 1, Periodic(1_000_000))
     GC.gc()
 end
 
