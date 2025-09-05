@@ -18,7 +18,7 @@ struct CommunicationResources
     control_stream::Aeron.Subscription
     input_streams::Vector{Aeron.Subscription}
 
-    function CommunicationResources(client::Aeron.Client, p::Properties)
+    function CommunicationResources(client::Aeron.Client, p::AbstractStaticKV)
         status_uri = p[:StatusURI]
         status_stream_id = p[:StatusStreamID]
         status_stream = Aeron.add_exclusive_publication(client, status_uri, status_stream_id)
