@@ -1,6 +1,18 @@
-# Timers Module
-# Provides event-based timer scheduling functionality
+"""
+    Timers
 
+Event-based timer scheduling functionality for real-time applications.
+
+Provides zero-allocation timer scheduling with polling-based event dispatch.
+Supports relative delays, absolute deadlines, and event-based cancellation.
+
+# Exports
+- `PolledTimer`: main timer scheduler type
+- `schedule!`, `schedule_at!`: timer scheduling functions  
+- `cancel!`: timer cancellation by ID or event
+- `poll`, `event`: timer querying functions
+- Timer exceptions: `TimerError`, `TimerNotFoundError`, etc.
+"""
 module Timers
 
 using Clocks

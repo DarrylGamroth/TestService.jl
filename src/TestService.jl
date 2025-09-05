@@ -48,7 +48,7 @@ function run_agent()
 
             # Start the agent
             runner = AgentRunner(BackoffIdleStrategy(), agent)
-            Agent.start_on_thread(runner, 2)
+            Agent.start_on_thread(runner)
 
             try
                 wait(runner)

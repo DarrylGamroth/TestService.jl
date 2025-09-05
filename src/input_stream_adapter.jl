@@ -1,3 +1,16 @@
+"""
+    InputStreamAdapter
+
+Adapter for processing input data messages from Aeron subscription.
+
+Handles fragment assembly and tensor message decoding for data stream processing.
+Specialized for tensor message format with position tracking.
+
+# Fields
+- `subscription::Aeron.Subscription`: input data stream
+- `assembler::Aeron.FragmentAssembler`: fragment reconstruction handler
+- `position_ptr::Base.RefValue{Int64}`: SBE decoding position tracker
+"""
 struct InputStreamAdapter
     subscription::Aeron.Subscription
     assembler::Aeron.FragmentAssembler

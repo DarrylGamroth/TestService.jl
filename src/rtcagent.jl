@@ -26,6 +26,22 @@ export RtcAgent,
 const DEFAULT_INPUT_FRAGMENT_COUNT_LIMIT = 10
 const DEFAULT_CONTROL_FRAGMENT_COUNT_LIMIT = 1
 
+"""
+    PublicationConfig
+
+Configuration for property publication with timing and strategy management.
+
+Tracks publication state and controls when property values are published based
+on the configured strategy. Fields are ordered by access frequency.
+
+# Fields
+- `last_published_ns::Int64`: timestamp of last publication in nanoseconds
+- `next_scheduled_ns::Int64`: next scheduled publication time in nanoseconds
+- `field::Symbol`: property field name to publish
+- `stream_index::Int`: target output stream index (1-based)
+- `strategy::PublishStrategy`: publication timing strategy
+- `stream::Aeron.ExclusivePublication`: direct stream reference for efficiency
+"""
 mutable struct PublicationConfig
     last_published_ns::Int64
     next_scheduled_ns::Int64
@@ -35,14 +51,37 @@ mutable struct PublicationConfig
     stream::Aeron.ExclusivePublication
 end
 
-"""
-Event management system that encapsulates event dispatch, communications, and state tracking.
-"""
-
 # Include proxy modules before RtcAgent struct to make types available
 include("status_proxy.jl")
 include("property_proxy.jl")
 
+"""
+    RtcAgent{C,P,ID,ET}
+
+Real-time control agent with hierarchical state machine and communication.
+
+Manages event dispatch, property publishing, timer scheduling, and state
+transitions. Generic parameters allow customization of core components.
+
+# Type Parameters
+- `C<:AbstractClock`: clock implementation for timing operations
+- `P<:AbstractStaticKV`: property store implementation
+- `ID<:SnowflakeIdGenerator`: unique ID generator for correlation
+- `ET<:PolledTimer`: timer implementation for scheduled operations
+
+# Fields
+- `clock::C`: timing source for all operations
+- `properties::P`: agent configuration and runtime properties
+- `id_gen::ID`: correlation ID generator
+- `timers::ET`: timer scheduler for periodic operations
+- `comms::CommunicationResources`: Aeron stream management
+- `status_proxy::Union{Nothing,StatusProxy}`: status publishing interface
+- `property_proxy::Union{Nothing,PropertyProxy}`: property publishing interface
+- `control_adapter::Union{Nothing,ControlStreamAdapter}`: control message handler
+- `input_adapters::Vector{InputStreamAdapter}`: input stream processors
+- `property_registry::Vector{PublicationConfig}`: registered property configs
+- `source_correlation_id::Int64`: current message correlation ID
+"""
 @hsmdef mutable struct RtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeIdGenerator,ET<:PolledTimer}
     clock::C
     properties::P
@@ -84,7 +123,12 @@ end
 # =============================================================================
 
 """
-Publish a status event using the agent's status proxy (convenience method).
+    publish_status_event(agent, event, data[, correlation_id])
+
+Publish a status event using the agent's status proxy.
+
+Convenience method that automatically handles timestamp generation and agent name.
+Throws `AgentStateError` if the status proxy is not initialized.
 """
 function publish_status_event(agent::RtcAgent, event::Symbol, data, correlation_id::Int64=next_id(agent.id_gen))
     if isnothing(agent.status_proxy)
@@ -99,7 +143,11 @@ function publish_status_event(agent::RtcAgent, event::Symbol, data, correlation_
 end
 
 """
-Publish a state change event using the agent's status proxy (convenience method).
+    publish_state_change(agent, new_state[, correlation_id])
+
+Publish a state change event using the agent's status proxy.
+
+Convenience method for reporting agent state transitions.
 """
 function publish_state_change(agent::RtcAgent, new_state::Symbol, correlation_id::Int64=next_id(agent.id_gen))
     if isnothing(agent.status_proxy)
@@ -225,6 +273,11 @@ function should_poll_properties(agent::RtcAgent)
     return Hsm.current(agent) === :Playing
 end
 
+"""
+    property_poller(agent::RtcAgent) -> Int
+
+    Poll all registered properties for updates.
+"""
 function property_poller(agent::RtcAgent)
     if !should_poll_properties(agent) || isempty(agent.property_registry)
         return 0
@@ -260,8 +313,8 @@ function register!(agent::RtcAgent,
 
     # Create and add the configuration to the registry
     config = PublicationConfig(
-        -1,        # last_published_ns - Never published
-        next_time(strategy, 0),  # next_scheduled_ns
+        -1,
+        next_time(strategy, 0),
         field,
         stream_index,
         strategy,
@@ -331,10 +384,6 @@ function Base.empty!(agent::RtcAgent)
     empty!(agent.property_registry)
     return count
 end
-
-# =============================================================================
-# Agent Interface Implementation
-# =============================================================================
 
 """
 Get the name of this agent.

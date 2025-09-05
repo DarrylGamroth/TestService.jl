@@ -1,6 +1,3 @@
-# Agent-level exceptions
-# This file defines agent-specific exceptions including communication errors
-
 """
     AgentError
 
@@ -16,9 +13,11 @@ Base type for all communication-related errors.
 abstract type CommunicationError <: AgentError end
 
 """
-    AgentStateError(current_state::Symbol, attempted_operation::String)
+    AgentStateError
 
-Thrown when attempting an operation that is invalid in the current agent state.
+Thrown when attempting an operation invalid in the current agent state.
+
+Contains the current state and the operation that was attempted for debugging.
 """
 struct AgentStateError <: AgentError
     current_state::Symbol
@@ -30,7 +29,7 @@ function Base.showerror(io::IO, e::AgentStateError)
 end
 
 """
-    AgentCommunicationError(message::String)
+    AgentCommunicationError
 
 Thrown when agent communication setup or operations fail.
 """
@@ -43,7 +42,7 @@ function Base.showerror(io::IO, e::AgentCommunicationError)
 end
 
 """
-    AgentConfigurationError(message::String)
+    AgentConfigurationError
 
 Thrown when agent configuration is invalid or incomplete.
 """
@@ -56,9 +55,11 @@ function Base.showerror(io::IO, e::AgentConfigurationError)
 end
 
 """
-    PublicationError(message::String, field::Symbol)
+    PublicationError
 
 Thrown when property publication fails.
+
+Contains the error message and the field that failed to publish.
 """
 struct PublicationError <: AgentError
     message::String
@@ -72,9 +73,12 @@ end
 # Communication-specific exceptions
 
 """
-    ClaimBufferError(publication::String, length::Int, max_attempts::Int)
+    ClaimBufferError
 
-Thrown when unable to claim a buffer from an Aeron publication after maximum retry attempts.
+Thrown when unable to claim a buffer from an Aeron publication.
+
+Contains publication details, requested buffer length, and retry attempts
+for debugging back pressure or resource contention issues.
 """
 struct ClaimBufferError <: CommunicationError
     publication::String
@@ -87,9 +91,11 @@ function Base.showerror(io::IO, e::ClaimBufferError)
 end
 
 """
-    PublicationBackPressureError(publication::String, max_attempts::Int)
+    PublicationBackPressureError
 
-Thrown when unable to offer a buffer to an Aeron publication due to persistent back pressure.
+Thrown when unable to offer a buffer due to persistent back pressure.
+
+Indicates the Aeron publication is experiencing sustained high load.
 """
 struct PublicationBackPressureError <: CommunicationError
     publication::String
@@ -101,9 +107,11 @@ function Base.showerror(io::IO, e::PublicationBackPressureError)
 end
 
 """
-    StreamNotFoundError(stream_name::String, stream_index::Int)
+    StreamNotFoundError
 
 Thrown when attempting to access a stream that doesn't exist.
+
+Contains the stream name and index for debugging configuration issues.
 """
 struct StreamNotFoundError <: CommunicationError
     stream_name::String
@@ -115,9 +123,9 @@ function Base.showerror(io::IO, e::StreamNotFoundError)
 end
 
 """
-    CommunicationNotInitializedError(operation::String)
+    CommunicationNotInitializedError
 
-Thrown when attempting communication operations before communications are initialized.
+Thrown when attempting communication operations before initialization.
 """
 struct CommunicationNotInitializedError <: CommunicationError
     operation::String
@@ -128,9 +136,11 @@ function Base.showerror(io::IO, e::CommunicationNotInitializedError)
 end
 
 """
-    PublicationFailureError(publication::String, max_attempts::Int)
+    PublicationFailureError
 
-Thrown when unable to offer a buffer to an Aeron publication due to unexpected errors.
+Thrown when unable to offer a buffer due to unexpected errors.
+
+Indicates an unexpected failure in the Aeron publication system.
 """
 struct PublicationFailureError <: CommunicationError
     publication::String
@@ -142,9 +152,11 @@ function Base.showerror(io::IO, e::PublicationFailureError)
 end
 
 """
-    ClaimBackPressureError(publication::String, length::Int, max_attempts::Int)
+    ClaimBackPressureError
 
-Thrown when unable to claim a buffer from an Aeron publication due to persistent back pressure.
+Thrown when unable to claim a buffer due to persistent back pressure.
+
+Similar to `ClaimBufferError` but specifically indicates back pressure conditions.
 """
 struct ClaimBackPressureError <: CommunicationError
     publication::String

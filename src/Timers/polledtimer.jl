@@ -1,6 +1,10 @@
-# Timer functionality
-# Handles timer scheduling and timer event mapping using a simple sorted vector
+"""
+    TimerEntry{E}
 
+Entry in the timer queue with deadline, ID, and associated event.
+
+Contains deadline for ordering, unique ID for cancellation, and event payload.
+"""
 struct TimerEntry{E}
     deadline::Int64
     id::Int64
@@ -10,6 +14,23 @@ end
 # Custom comparison for reverse sorting (latest deadline first) without allocations
 Base.isless(a::TimerEntry, b::TimerEntry) = a.deadline > b.deadline
 
+"""
+    PolledTimer{C,E}
+
+Zero-allocation timer scheduler using a sorted vector for efficient polling.
+
+Maintains timers in deadline order for O(1) next-timer queries. Uses reverse
+sorting (latest first) to optimize common polling patterns.
+
+# Type Parameters
+- `C<:Clocks.AbstractClock`: clock implementation for timing operations
+- `E`: event type stored with timer entries (typically Symbol)
+
+# Fields
+- `clock::C`: timing source for deadline calculations
+- `timers::Vector{TimerEntry{E}}`: sorted timer queue (reverse deadline order)
+- `next_id::Int64`: incrementing ID generator for timer identification
+"""
 mutable struct PolledTimer{C<:Clocks.AbstractClock,E}
     clock::C
     timers::Vector{TimerEntry{E}}
@@ -141,7 +162,6 @@ function event(timer::PolledTimer, timer_id::Int64)
     return nothing
 end
 
-# Convenience accessors
 """
     length(timer::PolledTimer) -> Int
 

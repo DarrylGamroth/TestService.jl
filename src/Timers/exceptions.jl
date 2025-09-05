@@ -1,6 +1,3 @@
-# Timer-specific exceptions
-# Provides domain-specific error types for timer operations
-
 """
     TimerError
 
@@ -9,7 +6,7 @@ Base type for all timer-related errors.
 abstract type TimerError <: Exception end
 
 """
-    TimerNotFoundError(timer_id::Int64)
+    TimerNotFoundError
 
 Thrown when attempting to operate on a timer that doesn't exist.
 """
@@ -22,7 +19,7 @@ function Base.showerror(io::IO, e::TimerNotFoundError)
 end
 
 """
-    InvalidTimerError(message::String)
+    InvalidTimerError
 
 Thrown when timer operation parameters are invalid.
 """
@@ -35,9 +32,11 @@ function Base.showerror(io::IO, e::InvalidTimerError)
 end
 
 """
-    TimerSchedulingError(message::String, deadline::Int64)
+    TimerSchedulingError
 
 Thrown when timer scheduling fails due to invalid timing.
+
+Contains error message and the problematic deadline for debugging.
 """
 struct TimerSchedulingError <: TimerError
     message::String

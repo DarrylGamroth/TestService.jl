@@ -1,3 +1,16 @@
+"""
+    ControlStreamAdapter
+
+Adapter for processing control messages from Aeron subscription.
+
+Handles fragment assembly and message decoding for control stream processing.
+Uses position tracking for efficient SBE message parsing.
+
+# Fields
+- `subscription::Aeron.Subscription`: control message stream
+- `assembler::Aeron.FragmentAssembler`: fragment reconstruction handler
+- `position_ptr::Base.RefValue{Int64}`: SBE decoding position tracker
+"""
 struct ControlStreamAdapter
     subscription::Aeron.Subscription
     assembler::Aeron.FragmentAssembler

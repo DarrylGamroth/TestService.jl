@@ -1,6 +1,9 @@
-# State machine implementation
-# This file includes all state handler files in the correct order
-# Each state file contains its own @statedef declaration and handlers
+"""
+State machine implementation for RtcAgent hierarchical state management.
+
+Includes all state handler files in dependency order. Each state file contains
+its own state definitions and event handlers for the agent lifecycle.
+"""
 
 # Include all state handler files
 include("root.jl")

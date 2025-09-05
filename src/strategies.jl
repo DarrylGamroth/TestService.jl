@@ -1,9 +1,14 @@
-# Publication Strategy System
-#
-# This module provides publication strategies that determine when and how
-# properties should be published based on timing and update patterns.
+"""
+Publication strategy system for controlling property publication timing.
 
-# Individual strategy types
+Provides strategies that determine when and how properties should be published
+based on timing patterns, update events, and rate limiting requirements.
+
+Contains sum type `PublishStrategy` with constructors `OnUpdate()`, `Periodic()`,
+`Scheduled()`, and `RateLimited()` for different publication behaviors.
+"""
+
+# Strategy implementation types
 struct OnUpdateStrategy end
 
 struct PeriodicStrategy

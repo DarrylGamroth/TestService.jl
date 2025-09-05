@@ -1,15 +1,15 @@
 """
-Status proxy for publishing events and state changes to status stream.
-Handles all outbound status communication following the Aeron proxy pattern.
-"""
+    StatusProxy
 
-# =============================================================================
-# Proxy Struct Definition
-# =============================================================================
+Proxy for publishing events and state changes to the status stream.
 
-"""
-Status proxy struct for dedicated status stream publishing.
-Contains only the minimal components needed for Aeron message publishing.
+Contains minimal components needed for Aeron message publishing with SBE encoding.
+The `position_ptr` enables efficient buffer positioning during encoding operations.
+
+# Fields
+- `position_ptr::Base.RefValue{Int64}`: current buffer position for SBE encoding
+- `publication::Aeron.ExclusivePublication`: dedicated Aeron publication stream
+- `buffer::Vector{UInt8}`: reusable buffer for message construction
 """
 struct StatusProxy
     position_ptr::Base.RefValue{Int64}
@@ -21,7 +21,12 @@ struct StatusProxy
 end
 
 """
-Publish an event to an Aeron stream with SBE encoding.
+    publish_status_event(proxy, field, value, tag, correlation_id, timestamp_ns)
+
+Publish an event to the status stream with SBE encoding.
+
+Handles buffer claiming, message encoding, and publication to Aeron stream.
+Returns `nothing` on success or when no subscribers are present.
 """
 function publish_status_event(
     proxy::StatusProxy,
@@ -99,7 +104,11 @@ function publish_status_event(
 end
 
 """
-Publish an array event to an Aeron stream with SBE encoding.
+    publish_status_event(proxy, field, value::AbstractArray, tag, correlation_id, timestamp_ns)
+
+Publish an array event to the status stream with SBE tensor encoding.
+
+Uses tensor message format for efficient array data transmission.
 """
 function publish_status_event(
     proxy::StatusProxy,
@@ -154,14 +163,22 @@ function publish_status_event(
 end
 
 """
-Publish a state change event using the proxy struct interface.
+    publish_state_change(proxy, new_state, tag, correlation_id, timestamp_ns)
+
+Publish a state change event using the status proxy.
+
+Convenience function that publishes a `:StateChange` event with the new state value.
 """
 function publish_state_change(proxy::StatusProxy, new_state::Symbol, tag::String, correlation_id::Int64, timestamp_ns::Int64)
     return publish_status_event(proxy, :StateChange, new_state, tag, correlation_id, timestamp_ns)
 end
 
 """
-Publish an event response using the proxy struct interface.
+    publish_event_response(proxy, event, value, tag, correlation_id, timestamp_ns)
+
+Publish an event response using the status proxy.
+
+Used to respond to control events with result data or acknowledgments.
 """
 function publish_event_response(proxy::StatusProxy, event::Symbol, value, tag::String, correlation_id::Int64, timestamp_ns::Int64)
     return publish_status_event(proxy, event, value, tag, correlation_id, timestamp_ns)

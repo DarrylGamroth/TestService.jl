@@ -1,14 +1,16 @@
 """
     CommunicationResources
 
-Manages all Aeron communication streams for an RTC agent.
+Manage all Aeron communication streams for an RTC agent.
+
+Contains status, control, input, and output streams configured from environment
+properties. Streams are ordered by access frequency for optimal performance.
 
 # Fields
-- `status_stream::Aeron.ExclusivePublication` - Stream for publishing agent status
-- `control_stream::Aeron.Subscription` - Stream for receiving control commands
-- `input_streams::Vector{Aeron.Subscription}` - Streams for receiving input data
-- `output_streams::Vector{Aeron.ExclusivePublication}` - Streams for publishing output data
-
+- `status_stream::Aeron.ExclusivePublication`: stream for publishing agent status
+- `output_streams::Vector{Aeron.ExclusivePublication}`: streams for output data
+- `control_stream::Aeron.Subscription`: stream for receiving control commands  
+- `input_streams::Vector{Aeron.Subscription}`: streams for receiving input data
 """
 struct CommunicationResources
     status_stream::Aeron.ExclusivePublication

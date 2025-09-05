@@ -1,15 +1,15 @@
 """
-Property proxy for publishing property values to multiple output streams.
-Handles all outbound property communication following the Aeron proxy pattern.
-"""
+    PropertyProxy
 
-# =============================================================================
-# Proxy Struct Definition
-# =============================================================================
+Proxy for publishing property values to multiple output streams.
 
-"""
-Property proxy struct for dedicated property stream publishing.
-Contains only the minimal components needed for Aeron message publishing.
+Contains minimal components for Aeron message publishing with stream selection.
+The `publications` vector enables routing to different streams based on index.
+
+# Fields
+- `position_ptr::Base.RefValue{Int64}`: current buffer position for SBE encoding
+- `publications::Vector{Aeron.ExclusivePublication}`: multiple output streams
+- `buffer::Vector{UInt8}`: reusable buffer for message construction
 """
 struct PropertyProxy
     position_ptr::Base.RefValue{Int64}
@@ -20,6 +20,22 @@ struct PropertyProxy
     end
 end
 
+"""
+    publish_property(proxy, stream_index, field, value, tag, correlation_id, timestamp_ns)
+
+Publish a property value to the specified output stream with SBE encoding.
+
+Routes to the output stream by index and handles buffer claiming and message encoding.
+Returns `nothing` on success or when no subscribers are present.
+
+# Arguments
+- `stream_index::Int`: 1-based index into the publications vector
+- `field::Symbol`: property field name
+- `value`: property value (string, char, number, symbol, or tuple)
+- `tag::AbstractString`: message tag for identification
+- `correlation_id::Int64`: unique correlation identifier
+- `timestamp_ns::Int64`: message timestamp in nanoseconds
+"""
 function publish_property(
     proxy::PropertyProxy,
     stream_index::Int,
@@ -66,7 +82,11 @@ function publish_property(
 end
 
 """
-Publish an array value to an Aeron stream with SBE encoding.
+    publish_property(proxy, stream_index, field, value::AbstractArray, tag, correlation_id, timestamp_ns)
+
+Publish an array property value with SBE tensor encoding.
+
+Routes to the specified output stream by index with efficient tensor format.
 """
 function publish_property(
     proxy::PropertyProxy,
@@ -112,8 +132,12 @@ function publish_property(
 end
 
 """
-Publish a single property update with strategy evaluation using the proxy struct interface.
-This function contains the business logic for strategy evaluation and publication timing.
+    publish_property_update(proxy, config, properties, tag, correlation_id, now)
+
+Publish a property update with strategy evaluation and timing control.
+
+Evaluates the publication strategy to determine if the property should be published
+at the current time, then handles the publication and updates timing state.
 """
 function publish_property_update(proxy::PropertyProxy, config::PublicationConfig, properties::AbstractStaticKV, tag::String, correlation_id::Int64, now::Int64)
     property_timestamp_ns = last_update(properties, config.field)
