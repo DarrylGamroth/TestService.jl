@@ -56,29 +56,19 @@ function poll(adapter::InputStreamAdapter, limit::Int)
 end
 
 """
-    poll(adapters::Vector{InputStreamAdapter}, limit::Int) -> Int
+    poll(adapters::AbstractVector{InputStreamAdapter}, limit::Int) -> Int
 
 Poll all input stream adapters for incoming data messages.
 Returns the total number of fragments processed across all adapters.
-Uses the same polling strategy as the original input_poller.
+Each adapter gets polled with the full limit for maximum throughput.
 """
-function poll(adapters::Vector{InputStreamAdapter}, limit::Int)
+function poll(adapters::AbstractVector{InputStreamAdapter}, limit::Int)
     work_count = 0
 
-    while true
-        all_streams_empty = true
-
-        for adapter in adapters
-            fragments_read = poll(adapter, limit)
-            if fragments_read > 0
-                all_streams_empty = false
-            end
-            work_count += fragments_read
-        end
-
-        if all_streams_empty
-            break
-        end
+    # Poll each adapter with the full limit
+    for adapter in adapters
+        work_count += poll(adapter, limit)
     end
+
     return work_count
 end

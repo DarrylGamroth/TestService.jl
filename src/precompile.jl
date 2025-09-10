@@ -147,8 +147,8 @@ function _precompile_testservice()
     precompile(Tuple{typeof(set_property_value!),PropertiesType,Symbol,Array{Float32,3},Type{Array{Float32,3}}})
 
     # Property handlers
-    precompile(Tuple{typeof(handle_property_write),AgentType,Symbol,EventMessageDecoder})
-    precompile(Tuple{typeof(handle_property_read),AgentType,Symbol,EventMessageDecoder})
+    precompile(Tuple{typeof(on_property_write),AgentType,Symbol,EventMessageDecoder})
+    precompile(Tuple{typeof(on_property_read),AgentType,Symbol,EventMessageDecoder})
 
     # =============================================================================
     # Agent State Machine and Event Dispatch

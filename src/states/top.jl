@@ -29,9 +29,10 @@ end
     return Hsm.EventHandled
 end
 
-@on_event function (sm::RtcAgent, ::Top, event::Error, error::Exception)
+@on_event function (sm::RtcAgent, ::Top, event::Error, (e, exception))
     sm.source_correlation_id = next_id(sm.id_gen)
-    publish_status_event(sm, event, error, sm.source_correlation_id)
+    publish_status_event(sm, event, exception, sm.source_correlation_id)
+    @error "Error in dispatching event $e" exception
     return Hsm.EventHandled
 
     # Transition to Error state
@@ -58,7 +59,7 @@ end
 
 @on_event function (sm::RtcAgent, ::Top, ::Properties, message)
     for name in keynames(sm.properties)
-        handle_property_read(sm, name, message)
+        on_property_read(sm, name, message)
     end
     return Hsm.EventHandled
 end

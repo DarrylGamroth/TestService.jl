@@ -131,14 +131,11 @@ Convenience method that automatically handles timestamp generation and agent nam
 Throws `AgentStateError` if the status proxy is not initialized.
 """
 function publish_status_event(agent::RtcAgent, event::Symbol, data, correlation_id::Int64=next_id(agent.id_gen))
-    if isnothing(agent.status_proxy)
-        throw(AgentStateError(event, "Agent status proxy not initialized"))
-    end
-
     timestamp = time_nanos(agent.clock)
+    proxy = agent.status_proxy::StatusProxy
 
     return publish_status_event(
-        agent.status_proxy, event, data, agent.properties[:Name], correlation_id, timestamp
+        proxy, event, data, agent.properties[:Name], correlation_id, timestamp
     )
 end
 
@@ -150,14 +147,11 @@ Publish a state change event using the agent's status proxy.
 Convenience method for reporting agent state transitions.
 """
 function publish_state_change(agent::RtcAgent, new_state::Symbol, correlation_id::Int64=next_id(agent.id_gen))
-    if isnothing(agent.status_proxy)
-        throw(AgentStateError(new_state, "Agent status proxy not initialized"))
-    end
-
     timestamp = time_nanos(agent.clock)
+    proxy = agent.status_proxy::StatusProxy
 
     return publish_state_change(
-        agent.status_proxy, new_state, agent.properties[:Name], correlation_id, timestamp
+        proxy, new_state, agent.properties[:Name], correlation_id, timestamp
     )
 end
 
@@ -165,14 +159,11 @@ end
 Publish an event response using the agent's status proxy (convenience method).
 """
 function publish_event_response(agent::RtcAgent, event::Symbol, value, correlation_id::Int64=next_id(agent.id_gen))
-    if isnothing(agent.status_proxy)
-        throw(AgentStateError(event, "Agent status proxy not initialized"))
-    end
-
     timestamp = time_nanos(agent.clock)
+    proxy = agent.status_proxy::StatusProxy
 
     return publish_event_response(
-        agent.status_proxy, event, value, agent.properties[:Name], correlation_id, timestamp
+        proxy, event, value, agent.properties[:Name], correlation_id, timestamp
     )
 end
 
@@ -180,18 +171,15 @@ end
 Publish a property value to a specific output stream using the agent's property proxy (convenience method).
 """
 function publish_property(agent::RtcAgent, stream_index::Int, field::Symbol, value, correlation_id::Int64=next_id(agent.id_gen))
-    if isnothing(agent.property_proxy)
-        throw(AgentStateError(field, "Agent property proxy not initialized"))
-    end
-
     # Validate field exists in properties
     if !haskey(agent.properties, field)
         throw(KeyError("Property $field not found in agent"))
     end
 
     timestamp = time_nanos(agent.clock)
+    proxy = agent.property_proxy::PropertyProxy
 
-    return publish_property(agent.property_proxy, stream_index, field, value,
+    return publish_property(proxy, stream_index, field, value,
         agent.properties[:Name], correlation_id, timestamp)
 end
 
@@ -199,15 +187,12 @@ end
 Publish a single property update with strategy evaluation using the agent's property proxy (convenience method).
 """
 function publish_property_update(agent::RtcAgent, config::PublicationConfig)
-    if isnothing(agent.property_proxy)
-        throw(AgentStateError(config.field, "Agent property proxy not initialized"))
-    end
-
     timestamp = time_nanos(agent.clock)
     correlation_id = next_id(agent.id_gen)
+    proxy = agent.property_proxy::PropertyProxy
 
     # Delegate to proxy with business logic parameters
-    return publish_property_update(agent.property_proxy, config, agent.properties,
+    return publish_property_update(proxy, config, agent.properties,
         agent.properties[:Name], correlation_id, timestamp)
 end
 
@@ -231,11 +216,20 @@ function dispatch!(agent::RtcAgent, event::Symbol, message=nothing)
             @info "Agent termination requested"
             throw(e)
         else
-            @error "Error in dispatching event $event" exception = (e, catch_backtrace())
-            Hsm.dispatch!(agent, :Error, e)
+            Hsm.dispatch!(agent, :Error, (event, e::Exception))
         end
     end
 end
+# function dispatch!(agent::RtcAgent, event::Symbol, message=nothing)
+#     prev = Hsm.current(agent)
+#     Hsm.dispatch!(agent, event, message)
+#     current = Hsm.current(agent)
+
+#     if prev != current
+#         publish_state_change(agent, current)
+#     end
+# end
+
 
 """
     input_poller(agent::RtcAgent) -> Int
@@ -254,7 +248,8 @@ Poll the control stream for incoming control messages using the control stream a
 Returns the number of fragments processed.
 """
 function control_poller(agent::RtcAgent)
-    poll(agent.control_adapter, DEFAULT_CONTROL_FRAGMENT_COUNT_LIMIT)
+    adapter = agent.control_adapter::ControlStreamAdapter
+    poll(adapter, DEFAULT_CONTROL_FRAGMENT_COUNT_LIMIT)
 end
 
 function timer_poller(agent::RtcAgent)
@@ -458,6 +453,6 @@ function Agent.do_work(agent::RtcAgent)
     return work_count
 end
 
-include("utilities.jl")
+include("property_handlers.jl")
 include("states/states.jl")
 include("precompile.jl")

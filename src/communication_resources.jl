@@ -7,39 +7,39 @@ Contains status, control, input, and output streams configured from environment
 properties. Streams are ordered by access frequency for optimal performance.
 
 # Fields
-- `status_stream::Aeron.ExclusivePublication`: stream for publishing agent status
-- `output_streams::Vector{Aeron.ExclusivePublication}`: streams for output data
-- `control_stream::Aeron.Subscription`: stream for receiving control commands  
 - `input_streams::Vector{Aeron.Subscription}`: streams for receiving input data
+- `output_streams::Vector{Aeron.ExclusivePublication}`: streams for output data
+- `status_stream::Aeron.ExclusivePublication`: stream for publishing agent status
+- `control_stream::Aeron.Subscription`: stream for receiving control commands
 """
 struct CommunicationResources
-    status_stream::Aeron.ExclusivePublication
-    output_streams::Vector{Aeron.ExclusivePublication}
-    control_stream::Aeron.Subscription
     input_streams::Vector{Aeron.Subscription}
+    output_streams::Vector{Aeron.ExclusivePublication}
+    status_stream::Aeron.ExclusivePublication
+    control_stream::Aeron.Subscription
 
-    function CommunicationResources(client::Aeron.Client, p::AbstractStaticKV)
-        status_uri = p[:StatusURI]
-        status_stream_id = p[:StatusStreamID]
+    function CommunicationResources(client::Aeron.Client, properties::AbstractStaticKV)
+        status_uri = properties[:StatusURI]
+        status_stream_id = properties[:StatusStreamID]
         status_stream = Aeron.add_exclusive_publication(client, status_uri, status_stream_id)
 
-        control_uri = p[:ControlURI]
-        control_stream_id = p[:ControlStreamID]
+        control_uri = properties[:ControlURI]
+        control_stream_id = properties[:ControlStreamID]
         control_stream = Aeron.add_subscription(client, control_uri, control_stream_id)
 
         input_streams = Aeron.Subscription[]
 
         # Get the number of sub data connections from properties
-        sub_data_connection_count = p[:SubDataConnectionCount]
+        sub_data_connection_count = properties[:SubDataConnectionCount]
 
         # Create subscriptions for each sub data URI/stream pair
         for i in 1:sub_data_connection_count
             uri_key = Symbol("SubDataURI$i")
             stream_id_key = Symbol("SubDataStreamID$i")
 
-            if haskey(p, uri_key) && haskey(p, stream_id_key)
-                uri = p[uri_key]
-                stream_id = p[stream_id_key]
+            if haskey(properties, uri_key) && haskey(properties, stream_id_key)
+                uri = properties[uri_key]
+                stream_id = properties[stream_id_key]
                 subscription = Aeron.add_subscription(client, uri, stream_id)
                 push!(input_streams, subscription)
                 @info "Created subscription $i: $uri (stream ID: $stream_id)"
@@ -50,8 +50,8 @@ struct CommunicationResources
         output_streams = Aeron.ExclusivePublication[]
 
         # Set up PubData publications
-        if haskey(p, :PubDataConnectionCount)
-            pub_data_connection_count = p[:PubDataConnectionCount]
+        if haskey(properties, :PubDataConnectionCount)
+            pub_data_connection_count = properties[:PubDataConnectionCount]
 
             # Resize the vector to accommodate all publications
             resize!(output_streams, pub_data_connection_count)
@@ -60,9 +60,9 @@ struct CommunicationResources
                 uri_key = Symbol("PubDataURI$i")
                 stream_id_key = Symbol("PubDataStreamID$i")
 
-                if haskey(p, uri_key) && haskey(p, stream_id_key)
-                    uri = p[uri_key]
-                    stream_id = p[stream_id_key]
+                if haskey(properties, uri_key) && haskey(properties, stream_id_key)
+                    uri = properties[uri_key]
+                    stream_id = properties[stream_id_key]
                     publication = Aeron.add_exclusive_publication(client, uri, stream_id)
                     output_streams[i] = publication
                     @info "Created publication $i: $uri (stream ID: $stream_id)"
@@ -74,10 +74,7 @@ struct CommunicationResources
             @info "No PubDataConnectionCount found in properties, no publications created"
         end
 
-        new(status_stream,
-            output_streams,
-            control_stream,
-            input_streams)
+        new(input_streams, output_streams, status_stream, control_stream)
     end
 end
 

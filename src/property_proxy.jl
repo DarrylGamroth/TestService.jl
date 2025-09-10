@@ -43,13 +43,7 @@ function publish_property(
     value::T,
     tag::AbstractString,
     correlation_id::Int64,
-    timestamp_ns::Int64) where {T<:Union{AbstractString,Char,Real,Symbol,Tuple}}
-
-    if stream_index < 1 || stream_index > length(proxy.publications)
-        throw(StreamNotFoundError("PubData$stream_index", stream_index))
-    end
-
-    publication = proxy.publications[stream_index]
+    timestamp_ns::Int64) where {T<:Union{AbstractString,Char,Real,Nothing,Symbol,Tuple}}
 
     # Calculate buffer length needed
     len = sbe_encoded_length(MessageHeader) +
@@ -58,7 +52,7 @@ function publish_property(
           sizeof(value)
 
     # Try to claim the buffer
-    claim = try_claim(publication, len)
+    claim = try_claim(proxy.publications[stream_index], len)
     if isnothing(claim)
         # No subscribers - skip publishing
         return nothing
@@ -97,12 +91,6 @@ function publish_property(
     correlation_id::Int64,
     timestamp_ns::Int64) where {T<:AbstractArray}
 
-    if stream_index < 1 || stream_index > length(proxy.publications)
-        throw(StreamNotFoundError("PubData$stream_index", stream_index))
-    end
-
-    publication = proxy.publications[stream_index]
-
     # Calculate array data length
     len = sizeof(eltype(value)) * length(value)
 
@@ -111,7 +99,7 @@ function publish_property(
     header = SpidersMessageCodecs.header(encoder)
     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
     SpidersMessageCodecs.correlationId!(header, correlation_id)
-    SpidersMessageCodecs.tag!(header, tag)
+    SpidersMessageCodecs.tag!(header, field)
     SpidersMessageCodecs.format!(encoder, convert(SpidersMessageCodecs.Format.SbeEnum, eltype(value)))
     SpidersMessageCodecs.majorOrder!(encoder, SpidersMessageCodecs.MajorOrder.COLUMN)
     SpidersMessageCodecs.dims!(encoder, Int32.(size(value)))
@@ -121,7 +109,7 @@ function publish_property(
     tensor_message = convert(AbstractArray{UInt8}, encoder)
 
     # Offer the combined message
-    offer(publication,
+    offer(proxy.publications[stream_index],
         (
             tensor_message,
             vec(reinterpret(UInt8, value))

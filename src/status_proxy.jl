@@ -34,7 +34,7 @@ function publish_status_event(
     value::T,
     tag::AbstractString,
     correlation_id::Int64,
-    timestamp_ns::Int64) where {T<:Union{AbstractString,Char,Real,Symbol,Tuple}}
+    timestamp_ns::Int64) where {T<:Union{AbstractString,Char,Nothing,Real,Symbol,Tuple}}
 
     # Calculate buffer length needed
     len = sbe_encoded_length(MessageHeader) +

@@ -12,9 +12,17 @@ Decode an array property value from a tensor message.
 
 Extracts tensor data from SBE message format and reconstructs the array.
 """
-function decode_property_value(message, ::Type{T}) where {T<:AbstractArray}
+function decode_property_value(message, ::Type{A}) where {T,N,A<:AbstractArray{T,N}}
     tensor_message = SpidersMessageCodecs.value(message, SpidersMessageCodecs.TensorMessage)
-    SpidersMessageCodecs.decode(tensor_message, T)
+
+    prop_sbe_type = convert(SpidersMessageCodecs.Format.SbeEnum, T)
+    message_sbe_type = SpidersMessageCodecs.format(tensor_message)
+
+    if message_sbe_type != prop_sbe_type
+        throw(ErrorException("Property type mismatch for $event: expected $prop_sbe_type, got $message_sbe_type"))
+    end
+    
+    SpidersMessageCodecs.decode(tensor_message, A)
 end
 
 """
@@ -25,6 +33,12 @@ Decode a scalar property value from an event message.
 Generic fallback for non-array types including strings, numbers, and symbols.
 """
 function decode_property_value(message, ::Type{T}) where {T}
+    prop_sbe_type = convert(SpidersMessageCodecs.Format.SbeEnum, T)
+    message_sbe_type = SpidersMessageCodecs.format(message)
+
+    if message_sbe_type != prop_sbe_type
+        throw(ErrorException("Property type mismatch for $event: expected $prop_sbe_type, got $message_sbe_type"))
+    end
     SpidersMessageCodecs.value(message, T)
 end
 
@@ -69,29 +83,29 @@ function set_property_value!(properties::AbstractStaticKV, event, value, ::Type{
 end
 
 """
-    handle_property_write(sm, event, message)
+    on_property_write(sm, event, message)
 
 Handle a property write request by decoding and storing the new value.
 
 Decodes the property value from the message, updates the property store,
 and publishes a status event confirming the change.
 """
-function handle_property_write(sm::RtcAgent, event, message)
+function on_property_write(sm::RtcAgent, event, message)
     prop_type = keytype(sm.properties, event)
     value = decode_property_value(message, prop_type)
-    
+
     set_property_value!(sm.properties, event, value, prop_type)
     publish_status_event(sm, event, value, sm.source_correlation_id)
 end
 
 """
-    handle_property_read(sm, event, _)
+    on_property_read(sm, event, _)
 
 Handle a property read request by publishing the current value.
 
 Checks if the property exists and publishes its current value as a status event.
 """
-function handle_property_read(sm::RtcAgent, event, _)
+function on_property_read(sm::RtcAgent, event, _)
     if isset(sm.properties, event)
         value = sm.properties[event]
         publish_status_event(sm, event, value, sm.source_correlation_id)

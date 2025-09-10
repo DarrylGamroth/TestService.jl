@@ -62,6 +62,11 @@
             return val
         end
     )
+    GCBytes::Int64 => (
+        0;
+        access = AccessMode.READABLE,
+        on_get = (obj, name, val) -> Base.gc_bytes()
+    )
     TestMatrix::Array{Float32,3} => (
         rand(Float32, 10, 5, 2);
     )
