@@ -6,6 +6,9 @@ Adapter for processing input data messages from Aeron subscription.
 Handles fragment assembly and tensor message decoding for data stream processing.
 Specialized for tensor message format with position tracking.
 
+Supports late message handling via `:LateMessageThresholdNs` property. 
+Late messages dispatch `:LateMessage` events.
+
 # Fields
 - `subscription::Aeron.Subscription`: input data stream
 - `assembler::Aeron.FragmentAssembler`: fragment reconstruction handler
@@ -34,15 +37,27 @@ function InputStreamAdapter(subscription::Aeron.Subscription, agent)
             header = SpidersMessageCodecs.header(message)
             agent.source_correlation_id = SpidersMessageCodecs.correlationId(header)
             tag = SpidersMessageCodecs.tag(header, Symbol)
-
             dispatch!(agent, tag, message)
             nothing
         end
-        assembler = Aeron.FragmentAssembler(fragment_handler)
+
+        # Create late fragment handler that dispatches :LateMessage event
+        late_fragment_handler = Aeron.FragmentHandler(agent) do agent, buffer, _
+            message = TensorMessageDecoder(buffer; position_ptr=position_ptr)
+            header = SpidersMessageCodecs.header(message)
+            agent.source_correlation_id = SpidersMessageCodecs.correlationId(header)
+            dispatch!(agent, :LateMessage, message)
+            nothing
+        end
+
+        # Apply late fragment filtering if configured
+        final_handler = SpidersLateFragmentFilter(fragment_handler, late_fragment_handler,
+            agent.properties[:LateMessageThresholdNs], agent.clock)
+
+        assembler = Aeron.FragmentAssembler(final_handler)
 
         InputStreamAdapter(subscription, assembler, position_ptr)
     end
-
 end
 
 """
@@ -65,9 +80,8 @@ Each adapter gets polled with the full limit for maximum throughput.
 function poll(adapters::AbstractVector{InputStreamAdapter}, limit::Int)
     work_count = 0
 
-    # Poll each adapter with the full limit
-    for adapter in adapters
-        work_count += poll(adapter, limit)
+    @inbounds for i in 1:length(adapters)
+        work_count += poll(adapters[i], limit)
     end
 
     return work_count

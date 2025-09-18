@@ -42,11 +42,15 @@
     HeartbeatPeriodNs::Int64 => (
         parse(Int64, get(ENV, "HEARTBEAT_PERIOD_NS", "10000000000"))
     )
+    LateMessageThresholdNs::Int64 => (
+        parse(Int64, get(ENV, "LATE_MESSAGE_THRESHOLD_NS", "1000000000"));
+        access = AccessMode.READABLE
+    )
     LogLevel::Symbol => (
         Symbol(get(ENV, "LOG_LEVEL", "Debug"));
         on_set = (obj, name, val) -> begin
             if !isdefined(Logging, val)
-                throw(PropertyTypeError(name, Symbol, typeof(val)))
+                throw(ArgumentError("Invalid log level: $val"))
             end
 
             level = getfield(Logging, val)
@@ -55,20 +59,22 @@
             return val
         end
     )
-    GCLogging::Bool => (
-        parse(Bool, get(ENV, "GC_LOGGING", "false"));
-        on_set = (obj, name, val) -> begin
-            GC.enable_logging(val)
-            return val
-        end
-    )
     GCBytes::Int64 => (
         0;
-        access = AccessMode.READABLE,
-        on_get = (obj, name, val) -> Base.gc_bytes()
+        access=AccessMode.READABLE,
+        on_get=(obj, name, val) -> Base.gc_bytes()
+    )
+    GCEnable::Bool => (
+        true;
+        on_set=(obj, name, val) -> GC.enable(val),
+    )
+    GCLogging::Bool => (
+        parse(Bool, get(ENV, "GC_LOGGING", "false"));
+        on_set=(obj, name, val) -> (GC.enable_logging(val); val),
+        on_get=(obj, name, val) -> GC.logging_enabled()
     )
     TestMatrix::Array{Float32,3} => (
-        rand(Float32, 10, 5, 2);
+        rand(Float32, 10, 5, 2)
     )
 
     @generate_sub_data_uri_keys

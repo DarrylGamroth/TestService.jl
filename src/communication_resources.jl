@@ -11,12 +11,14 @@ properties. Streams are ordered by access frequency for optimal performance.
 - `output_streams::Vector{Aeron.ExclusivePublication}`: streams for output data
 - `status_stream::Aeron.ExclusivePublication`: stream for publishing agent status
 - `control_stream::Aeron.Subscription`: stream for receiving control commands
+- `client::Aeron.Client`: Aeron client instance for managing streams
 """
 struct CommunicationResources
     input_streams::Vector{Aeron.Subscription}
     output_streams::Vector{Aeron.ExclusivePublication}
     status_stream::Aeron.ExclusivePublication
     control_stream::Aeron.Subscription
+    client::Aeron.Client
 
     function CommunicationResources(client::Aeron.Client, properties::AbstractStaticKV)
         status_uri = properties[:StatusURI]
@@ -74,7 +76,7 @@ struct CommunicationResources
             @info "No PubDataConnectionCount found in properties, no publications created"
         end
 
-        new(input_streams, output_streams, status_stream, control_stream)
+        new(input_streams, output_streams, status_stream, control_stream, client)
     end
 end
 

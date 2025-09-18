@@ -66,8 +66,6 @@ function _precompile_testservice()
     precompile(Tuple{typeof(PropertyProxy),Vector{Aeron.ExclusivePublication}})
 
     # Status event publishing functions
-    precompile(Tuple{typeof(publish_status_event),AgentType,Symbol,String,Int64})
-    precompile(Tuple{typeof(publish_status_event),AgentType,Symbol,Symbol,Int64})
     precompile(Tuple{typeof(publish_status_event),AgentType,Symbol,String})
     precompile(Tuple{typeof(publish_status_event),AgentType,Symbol,Symbol})
 

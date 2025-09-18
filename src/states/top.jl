@@ -20,7 +20,7 @@ end
 end
 
 @on_event function (sm::RtcAgent, ::Top, event::Heartbeat, now::Int64)
-    publish_status_event(sm, event, Hsm.current(sm), sm.source_correlation_id)
+    publish_event_response(sm, event, Hsm.current(sm))
 
     # Reschedule the next heartbeat
     next_heartbeat_time = now + sm.properties[:HeartbeatPeriodNs]
@@ -30,8 +30,7 @@ end
 end
 
 @on_event function (sm::RtcAgent, ::Top, event::Error, (e, exception))
-    sm.source_correlation_id = next_id(sm.id_gen)
-    publish_status_event(sm, event, exception, sm.source_correlation_id)
+    publish_event_response(sm, event, exception)
     @error "Error in dispatching event $e" exception
     return Hsm.EventHandled
 
@@ -43,8 +42,8 @@ end
     Hsm.transition!(sm, :Exit)
 end
 
-@on_event function (sm::RtcAgent, ::Top, ::State, _)
-    publish_status_event(sm, :State, Hsm.current(sm), sm.source_correlation_id)
+@on_event function (sm::RtcAgent, ::Top, event::State, _)
+    publish_event_response(sm, event, Hsm.current(sm))
     return Hsm.EventHandled
 end
 
@@ -55,6 +54,11 @@ end
 
 @on_event function (sm::RtcAgent, ::Top, ::Exit, _)
     Hsm.transition!(sm, :Exit)
+end
+
+@on_event function (sm::RtcAgent, ::Top, event::LateMessage, _)
+    publish_event_response(sm, event, nothing)    
+    return Hsm.EventHandled
 end
 
 @on_event function (sm::RtcAgent, ::Top, ::Properties, message)

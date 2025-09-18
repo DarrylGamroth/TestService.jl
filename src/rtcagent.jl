@@ -73,6 +73,7 @@ transitions. Generic parameters allow customization of core components.
 - `clock::C`: timing source for all operations
 - `properties::P`: agent configuration and runtime properties
 - `id_gen::ID`: correlation ID generator
+- `source_correlation_id::Int64`: correlation ID of current event being processed
 - `timers::ET`: timer scheduler for periodic operations
 - `comms::CommunicationResources`: Aeron stream management
 - `status_proxy::Union{Nothing,StatusProxy}`: status publishing interface
@@ -80,12 +81,12 @@ transitions. Generic parameters allow customization of core components.
 - `control_adapter::Union{Nothing,ControlStreamAdapter}`: control message handler
 - `input_adapters::Vector{InputStreamAdapter}`: input stream processors
 - `property_registry::Vector{PublicationConfig}`: registered property configs
-- `source_correlation_id::Int64`: current message correlation ID
 """
 @hsmdef mutable struct RtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeIdGenerator,ET<:PolledTimer}
     clock::C
     properties::P
     id_gen::ID
+    source_correlation_id::Int64
     timers::ET
     comms::CommunicationResources
     status_proxy::Union{Nothing,StatusProxy}
@@ -93,7 +94,6 @@ transitions. Generic parameters allow customization of core components.
     control_adapter::Union{Nothing,ControlStreamAdapter}
     input_adapters::Vector{InputStreamAdapter}
     property_registry::Vector{PublicationConfig}
-    source_correlation_id::Int64
 end
 
 function RtcAgent(comms::CommunicationResources, properties::AbstractStaticKV, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
@@ -107,14 +107,14 @@ function RtcAgent(comms::CommunicationResources, properties::AbstractStaticKV, c
         clock,
         properties,
         id_gen,
+        0,
         timers,
         comms,
         nothing,
         nothing,
         nothing,
         InputStreamAdapter[],
-        PublicationConfig[],
-        0
+        PublicationConfig[]
     )
 end
 
@@ -123,54 +123,54 @@ end
 # =============================================================================
 
 """
-    publish_status_event(agent, event, data[, correlation_id])
+    publish_status_event(agent, event, data)
 
 Publish a status event using the agent's status proxy.
 
 Convenience method that automatically handles timestamp generation and agent name.
 Throws `AgentStateError` if the status proxy is not initialized.
 """
-function publish_status_event(agent::RtcAgent, event::Symbol, data, correlation_id::Int64=next_id(agent.id_gen))
+function publish_status_event(agent::RtcAgent, event::Symbol, data)
     timestamp = time_nanos(agent.clock)
     proxy = agent.status_proxy::StatusProxy
 
     return publish_status_event(
-        proxy, event, data, agent.properties[:Name], correlation_id, timestamp
+        proxy, event, data, agent.properties[:Name], agent.source_correlation_id, timestamp
     )
 end
 
 """
-    publish_state_change(agent, new_state[, correlation_id])
+    publish_state_change(agent, new_state)
 
 Publish a state change event using the agent's status proxy.
 
 Convenience method for reporting agent state transitions.
 """
-function publish_state_change(agent::RtcAgent, new_state::Symbol, correlation_id::Int64=next_id(agent.id_gen))
+function publish_state_change(agent::RtcAgent, new_state::Symbol)
     timestamp = time_nanos(agent.clock)
     proxy = agent.status_proxy::StatusProxy
 
     return publish_state_change(
-        proxy, new_state, agent.properties[:Name], correlation_id, timestamp
+        proxy, new_state, agent.properties[:Name], agent.source_correlation_id, timestamp
     )
 end
 
 """
 Publish an event response using the agent's status proxy (convenience method).
 """
-function publish_event_response(agent::RtcAgent, event::Symbol, value, correlation_id::Int64=next_id(agent.id_gen))
+function publish_event_response(agent::RtcAgent, event::Symbol, value)
     timestamp = time_nanos(agent.clock)
     proxy = agent.status_proxy::StatusProxy
 
     return publish_event_response(
-        proxy, event, value, agent.properties[:Name], correlation_id, timestamp
+        proxy, event, value, agent.properties[:Name], agent.source_correlation_id, timestamp
     )
 end
 
 """
 Publish a property value to a specific output stream using the agent's property proxy (convenience method).
 """
-function publish_property(agent::RtcAgent, stream_index::Int, field::Symbol, value, correlation_id::Int64=next_id(agent.id_gen))
+function publish_property(agent::RtcAgent, stream_index::Int, field::Symbol, value)
     # Validate field exists in properties
     if !haskey(agent.properties, field)
         throw(KeyError("Property $field not found in agent"))
@@ -180,7 +180,7 @@ function publish_property(agent::RtcAgent, stream_index::Int, field::Symbol, val
     proxy = agent.property_proxy::PropertyProxy
 
     return publish_property(proxy, stream_index, field, value,
-        agent.properties[:Name], correlation_id, timestamp)
+        agent.properties[:Name], agent.source_correlation_id, timestamp)
 end
 
 """
@@ -220,16 +220,6 @@ function dispatch!(agent::RtcAgent, event::Symbol, message=nothing)
         end
     end
 end
-# function dispatch!(agent::RtcAgent, event::Symbol, message=nothing)
-#     prev = Hsm.current(agent)
-#     Hsm.dispatch!(agent, event, message)
-#     current = Hsm.current(agent)
-
-#     if prev != current
-#         publish_state_change(agent, current)
-#     end
-# end
-
 
 """
     input_poller(agent::RtcAgent) -> Int
@@ -279,15 +269,14 @@ function property_poller(agent::RtcAgent)
     end
 
     published_count = 0
+    registry = agent.property_registry
 
-    # Process each registered publication
-    for config in agent.property_registry
-        published_count += publish_property_update(agent, config)
+    @inbounds for i in 1:length(registry)
+        published_count += publish_property_update(agent, registry[i])
     end
 
     return published_count
 end
-
 """
     register!(agent::RtcAgent, field::Symbol, stream_index::Int, strategy::PublishStrategy)
 

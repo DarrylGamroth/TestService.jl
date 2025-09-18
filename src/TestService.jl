@@ -8,6 +8,7 @@ using Logging
 using StaticKV
 using SpidersMessageCodecs
 using SpidersFragmentFilters
+using ThreadPinning
 
 include("PropertyStore/PropertyStore.jl")
 using .PropertyStore
@@ -19,8 +20,10 @@ export main
 Base.exit_on_sigint(false)
 
 function (@main)(ARGS)
+    pinthreads(:affinitymask)
+
     launch_driver = parse(Bool, get(ENV, "LAUNCH_MEDIA_DRIVER", "false"))
-    
+
     if launch_driver
         @info "Launching Aeron MediaDriver"
         Aeron.MediaDriver.launch() do
@@ -39,16 +42,17 @@ function run_agent()
         Aeron.Client(context) do client
             clock = CachedEpochClock(EpochClock())
             properties = Properties(clock)
-            
+
             # Create communication resources
             comms = CommunicationResources(client, properties)
-            
+
             # Inject communication resources into the agent
             agent = RtcAgent(comms, properties, clock)
 
             # Start the agent
             runner = AgentRunner(BackoffIdleStrategy(), agent)
-            Agent.start_on_thread(runner)
+
+            Agent.start_on_thread(runner, 3)
 
             try
                 wait(runner)

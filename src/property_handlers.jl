@@ -95,7 +95,7 @@ function on_property_write(sm::RtcAgent, event, message)
     value = decode_property_value(message, prop_type)
 
     set_property_value!(sm.properties, event, value, prop_type)
-    publish_status_event(sm, event, value, sm.source_correlation_id)
+    publish_event_response(sm, event, value)
 end
 
 """
@@ -108,6 +108,8 @@ Checks if the property exists and publishes its current value as a status event.
 function on_property_read(sm::RtcAgent, event, _)
     if isset(sm.properties, event)
         value = sm.properties[event]
-        publish_status_event(sm, event, value, sm.source_correlation_id)
+        publish_event_response(sm, event, value)
+    else
+        publish_event_response(sm, event, nothing)
     end
 end

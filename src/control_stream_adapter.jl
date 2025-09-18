@@ -6,6 +6,9 @@ Adapter for processing control messages from Aeron subscription.
 Handles fragment assembly and message decoding for control stream processing.
 Uses position tracking for efficient SBE message parsing.
 
+Supports optional message filtering via `:ControlFilter` property and late message
+handling via `:LateThresholdNs` property. Late messages dispatch `:LateMessage` events.
+
 # Fields
 - `subscription::Aeron.Subscription`: control message stream
 - `assembler::Aeron.FragmentAssembler`: fragment reconstruction handler
@@ -36,21 +39,38 @@ function ControlStreamAdapter(subscription::Aeron.Subscription, agent)
                 header = SpidersMessageCodecs.header(message)
                 agent.source_correlation_id = SpidersMessageCodecs.correlationId(header)
                 event = SpidersMessageCodecs.key(message, Symbol)
-
                 dispatch!(agent, event, message)
+                offset += sbe_encoded_length(MessageHeader) + sbe_decoded_length(message)
+            end
+            nothing
+        end
 
+        # Create late fragment handler that dispatches :LateMessage event
+        late_fragment_handler = Aeron.FragmentHandler(agent) do agent, buffer, _
+            # Decode the late message and dispatch :LateMessage event
+            offset = 0
+            while offset < length(buffer)
+                message = EventMessageDecoder(buffer, offset; position_ptr=position_ptr)
+                header = SpidersMessageCodecs.header(message)
+                agent.source_correlation_id = SpidersMessageCodecs.correlationId(header)
+                dispatch!(agent, :LateMessage, message)
                 offset += sbe_encoded_length(MessageHeader) + sbe_decoded_length(message)
             end
             nothing
         end
 
         # Apply filtering if configured
-        if isset(agent.properties, :ControlFilter)
-            message_filter = SpidersTagFragmentFilter(fragment_handler, agent.properties[:ControlFilter])
-            assembler = Aeron.FragmentAssembler(message_filter)
+        filtered_handler = if isset(agent.properties, :ControlFilter)
+            SpidersTagFragmentFilter(fragment_handler, agent.properties[:ControlFilter])
         else
-            assembler = Aeron.FragmentAssembler(fragment_handler)
+            fragment_handler
         end
+
+        # Apply late fragment filtering if configured
+        final_handler = SpidersLateFragmentFilter(filtered_handler, late_fragment_handler,
+            agent.properties[:LateMessageThresholdNs], agent.clock)
+
+        assembler = Aeron.FragmentAssembler(final_handler)
 
         ControlStreamAdapter(subscription, assembler, position_ptr)
     end
